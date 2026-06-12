@@ -58,6 +58,16 @@ For each element's global DOF index pairs (Ia, Ib):
   M[Ia,Ib] += m_element_global[a,b]  (Phase 3)
 ```
 
+### Massless DOF Condensation
+
+```text
+K_eff = Kaa - Kam Kmm^-1 Kma
+M_eff = Maa
+C_eff = alpha*M_eff + beta*K_eff
+```
+
+This is a mathematical design decision for the spec and governs how massless stiffness-coupled DOFs are reduced before modal analysis.
+
 ### Boundary Reduction
 For fixed (restrained) DOFs, partition and solve reduced free system:
 ```text

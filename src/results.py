@@ -15,3 +15,22 @@ class StaticResults:
     nvm_data: dict
     dof_map: dict
     load_case_id: str
+
+
+@dataclass
+class DynamicAssemblyData:
+    """Dynamic assembly output and educational intermediate data."""
+
+    K: list
+    M: list
+    C: list
+    Kff: list
+    Mff: list
+    Cff: list
+    dof_map: dict
+    free_dofs: list
+    active_dynamic_dofs: list
+    condensed_massless_dofs: list
+    unit_system: str
+    rayleigh_alpha: float
+    rayleigh_beta: float

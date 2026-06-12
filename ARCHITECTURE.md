@@ -165,6 +165,33 @@ class THAResults:
     num_steps: int
 ```
 
+### DynamicAssemblyData (Phase 3)
+```python
+@dataclass
+class DynamicAssemblyData:
+    """Dynamic assembly output and educational intermediate data."""
+    K: list  # Full global stiffness matrix (n_dof x n_dof)
+    M: list  # Full global mass matrix (n_dof x n_dof)
+    C: list  # Full global damping matrix (n_dof x n_dof)
+
+    Kff: list  # Condensed dynamic stiffness matrix on active dynamic DOFs
+    Mff: list  # Condensed mass matrix on active dynamic DOFs
+    Cff: list  # Condensed damping matrix on active dynamic DOFs
+
+    dof_map: dict
+    free_dofs: list
+    active_dynamic_dofs: list
+    condensed_massless_dofs: list
+    unit_system: str
+
+    rayleigh_alpha: float
+    rayleigh_beta: float
+```
+
+Notes:
+- `Kff` is the condensed dynamic stiffness matrix produced by massless-DOF condensation, not merely a raw submatrix of the full `K`.
+- `active_dynamic_dofs` identifies the DOFs retained for dynamic analysis after removing zero-mass or massless stiffness-coupled DOFs as required.
+
 ---
 
 ## Reserved Model Attributes (Implement in Phase Indicated)

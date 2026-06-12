@@ -12,6 +12,7 @@ class Material:
     id: str
     E: float
     alpha: float = 0.0  # Coefficient of thermal expansion
+    density: float = 0.0
 
 @dataclass
 class Section:
@@ -228,6 +229,7 @@ class StructuralModel:
     load_cases: Dict[str, LoadCase] = field(default_factory=dict)
     lumped_masses: Dict[int, float] = field(default_factory=dict)
     diaphragm_ux_groups: Dict[str, List[int]] = field(default_factory=dict)
+    unit_system: str = "kN_m_tonne"
     is_dirty: bool = True
     cached_dof_map: dict = None
     cached_K: list = None
@@ -276,6 +278,7 @@ class XMLParser:
 
     def parse(self) -> StructuralModel:
         self.model.name = self.root.attrib.get('name', 'Untitled Model')
+        self.model.unit_system = self.root.attrib.get('unit_system', "kN_m_tonne")
         self._parse_materials()
         self._parse_sections()
         self._parse_nodes()
@@ -290,7 +293,8 @@ class XMLParser:
             m_id = mat.attrib['id']
             E = float(mat.attrib['E'])
             alpha = float(mat.attrib.get('alpha', 0.0))
-            self.model.materials[m_id] = Material(id=m_id, E=E, alpha=alpha)
+            density = float(mat.attrib.get('density', mat.attrib.get('rho', 0.0)))
+            self.model.materials[m_id] = Material(id=m_id, E=E, alpha=alpha, density=density)
 
     def _parse_sections(self):
         for sec in self.root.find('sections').findall('section'):

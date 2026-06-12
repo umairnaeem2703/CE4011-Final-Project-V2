@@ -49,11 +49,12 @@ class ElementPhysics:
                 [       0,    k_v2,    k_r2,       0,   -k_v2,    k_r1]
             ]
 
-    def get_lumped_mass_matrix(self, rho: float = 1.0) -> list:
+    def get_lumped_mass_matrix(self, rho: float = None) -> list:
         """Returns the local lumped mass matrix [m_lumped]."""
         A = self.element.section.A
         L = self.L
-        m_tot = rho * A * L
+        density = self.element.material.density if rho is None else rho
+        m_tot = density * A * L
         m_half = m_tot / 2.0
         
         # Translational mass is halved to each node. Rotational mass is zero.
@@ -74,11 +75,12 @@ class ElementPhysics:
                 [0, 0, 0, 0, 0, 0]
             ]
 
-    def get_consistent_mass_matrix(self, rho: float = 1.0) -> list:
+    def get_consistent_mass_matrix(self, rho: float = None) -> list:
         """Returns the local consistent mass matrix [m_consistent]."""
         A = self.element.section.A
         L = self.L
-        m_tot = rho * A * L
+        density = self.element.material.density if rho is None else rho
+        m_tot = density * A * L
         
         if self.element.type == 'truss':
             m1 = m_tot / 3.0
@@ -100,7 +102,7 @@ class ElementPhysics:
                 [0, -13*L*c, -3*L**2*c, 0, -22*L*c, 4*L**2*c]
             ]
 
-    def get_global_mass_matrix(self, matrix_type: str = 'lumped', rho: float = 1.0) -> list:
+    def get_global_mass_matrix(self, matrix_type: str = 'lumped', rho: float = None) -> list:
         """Returns the mass matrix in the global coordinate system."""
         if matrix_type == 'consistent':
             m_local = self.get_consistent_mass_matrix(rho)
