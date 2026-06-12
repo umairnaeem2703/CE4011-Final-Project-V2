@@ -34,7 +34,7 @@ Solvers must receive matrices/vectors and must not branch by structure type. She
 ## Required Outputs
 Preserve educational intermediate data:
 - Static: DOF map, K/Kff, F/Ff, displacements, reactions, element forces, N/V/M data.
-- Modal: K/M, eigenvalues, frequencies, periods, mode shapes, modal mass, participation factors, effective modal mass.
+- Modal: K/M, eigenvalues, frequencies, periods, mode shapes, modal mass, participation factors, effective modal mass. Massless stiffness-coupled DOFs shall be statically condensed before modal analysis; direct deletion is only permitted for disconnected zero-mass DOFs.
 - RSA: spectrum values, modal response vectors, SRSS/CQC results, peak displacement/drift/base shear/OTM where meaningful.
 - THA: Newmark time vector, force/excitation history, u/v/a histories, base shear/OTM histories, step table where practical.
 

@@ -189,6 +189,20 @@ Simple frame with 6 total DOFs, 3 restrained.
 Verify Mff, Cff, Kff are 3×3 and correctly partitioned.
 ```
 
+✓ **Test 5: Massless DOF static condensation reduces stiffness**
+```
+Create a 2-DOF spring system with one massless DOF coupled to a stiff DOF.
+Verify: K_eff = Kaa - Kam Kmm^-1 Kma is smaller than the direct Kaa value,
+         showing the condensed stiffness is the reduced dynamic stiffness.
+```
+
+✓ **Test 6: Density unit conversion (kg to tonne)**
+```
+Use rho = 7850 kg/m³ and convert to t/m³.
+Verify: rho_tonne = 7.85 t/m³ (1 tonne = 1000 kg).
+Ensure unit_system handling is consistent in dynamic assembly.
+```
+
 **Dependency check:**
 ```python
 def check_phase_3_complete(model, assembly_data):
