@@ -340,7 +340,7 @@ def check_phase_5_complete(results_tha):
 - `src/rsa_solver.py` (create new file)
 - `src/results.py` (RSAResults dataclass)
 - `src/main.py` (add RSA entry point)
-- `src/core/interpolation.py` (1D spectrum interpolation utility, if not present)
+- `src/interpolation.py` (1D spectrum interpolation utility, if not present)
 
 **Files to read (context only):**
 - `MATH_SPEC.md` (RSA and CQC formula)

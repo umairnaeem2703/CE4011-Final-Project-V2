@@ -13,6 +13,7 @@ from educational_exporter import EducationalExporter
 from modal_solver import ModalSolver, ModalSolverError  # <-- Added Import
 from ground_motion import GroundMotionConfig, read_ground_motion
 from newmark_solver import NewmarkTimeHistorySolver
+from rsa_solver import ResponseSpectrumSolver
 
 def run_analysis(xml_filepath: str, output_dir: str = "./results", plot: bool = True):
     print(f"--- Starting Analysis: {os.path.basename(xml_filepath)} ---")
@@ -126,6 +127,12 @@ def run_time_history_analysis(K: list, M: list, C: list, ground_motion_config: G
     record = read_ground_motion(ground_motion_config)
     solver = NewmarkTimeHistorySolver(K, M, C)
     return solver.solve_ground_motion(record, r, damping_ratio=damping_ratio)
+
+
+def run_response_spectrum_analysis(modal_results, spectrum_periods: list, spectrum_accelerations: list, combination_method: str = "SRSS", damping_ratio: float = 0.05):
+    """Backend Phase 6 entry point for response spectrum analysis."""
+    solver = ResponseSpectrumSolver(modal_results, spectrum_periods, spectrum_accelerations)
+    return solver.solve(combination_method=combination_method, damping_ratio=damping_ratio)
 
 if __name__ == "__main__":
     # Run analysis on provided models

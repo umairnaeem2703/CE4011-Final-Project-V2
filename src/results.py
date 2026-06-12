@@ -57,6 +57,26 @@ class ModalResults:
 
 
 @dataclass
+class RSAResults:
+    """Response spectrum analysis output and educational intermediate data."""
+
+    spectrum_periods: list
+    spectrum_accelerations: list
+    spectrum_values: list
+    num_modes: int
+    periods: list
+    modal_response_vectors: list
+    modal_base_shears: list
+    modal_overturning_moments: list
+    combination_method: str
+    combined_response: dict
+    combined_base_shear: float
+    combined_overturning_moment: float
+    rho_matrix: list
+    damping_ratio: float
+
+
+@dataclass
 class THAResults:
     """Time-history analysis output and educational intermediate data."""
 
