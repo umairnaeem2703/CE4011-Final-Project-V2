@@ -48,13 +48,16 @@ class PropertyPanel(ttk.LabelFrame):
         self.settlement_uy_var = tk.StringVar(value="0.0")
         self.settlement_rz_var = tk.StringVar(value="0.0")
         self.load_target_var = tk.StringVar(value="Node")
-        self.load_type_var = tk.StringVar(value="Nodal Force/Moment")
+        self.load_type_var = tk.StringVar(value="Nodal Load")
         self.load_case_var = tk.StringVar(value="LC1")
         self.fx_var = tk.StringVar(value="0.0")
         self.fy_var = tk.StringVar(value="0.0")
         self.mz_var = tk.StringVar(value="0.0")
         self.wx_var = tk.StringVar(value="0.0")
         self.wy_var = tk.StringVar(value="0.0")
+        self.load_coordinate_system_var = tk.StringVar(value="Member Local Axis")
+        self.point_direction_var = tk.StringVar(value="Y")
+        self.point_magnitude_var = tk.StringVar(value="0.0")
         self.position_var = tk.StringVar(value="0.5")
         self._section_geometric_widgets = []
         self._section_direct_widgets = []
@@ -286,22 +289,62 @@ class PropertyPanel(ttk.LabelFrame):
         form = ttk.Frame(self)
         form.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         form.columnconfigure(1, weight=1)
+        if self.load_target_var.get() == "Node" and self.load_type_var.get() not in ("Nodal Load", "Nodal Moment"):
+            self.load_type_var.set("Nodal Load")
+        elif self.load_target_var.get() == "Member" and self.load_type_var.get() not in (
+            "Uniformly Distributed Load",
+            "Point Load",
+        ):
+            self.load_type_var.set("Uniformly Distributed Load")
         self._combo(form, 0, "Target", self.load_target_var, ("Node", "Member"), self._sync_load_target)
-        self._combo(form, 1, "Type", self.load_type_var, ("Nodal Force/Moment", "UDL", "Point Load"), self._apply_load_settings)
-        ttk.Label(form, text="Case").grid(row=2, column=0, sticky="w", pady=2)
-        ttk.Entry(form, textvariable=self.load_case_var, width=10).grid(row=2, column=1, sticky="ew", pady=2)
-        ttk.Label(form, text="Fx / wx").grid(row=3, column=0, sticky="w", pady=2)
-        ttk.Entry(form, textvariable=self.fx_var, width=10).grid(row=3, column=1, sticky="ew", pady=2)
-        ttk.Label(form, text="Fy / wy").grid(row=4, column=0, sticky="w", pady=2)
-        ttk.Entry(form, textvariable=self.fy_var, width=10).grid(row=4, column=1, sticky="ew", pady=2)
-        ttk.Label(form, text="Mz").grid(row=5, column=0, sticky="w", pady=2)
-        ttk.Entry(form, textvariable=self.mz_var, width=10).grid(row=5, column=1, sticky="ew", pady=2)
-        ttk.Label(form, text="a/L").grid(row=6, column=0, sticky="w", pady=2)
-        ttk.Entry(form, textvariable=self.position_var, width=10).grid(row=6, column=1, sticky="ew", pady=2)
+        target = self.load_target_var.get()
+        load_type = self.load_type_var.get()
+        if target == "Node":
+            self._combo(form, 1, "Type", self.load_type_var, ("Nodal Load", "Nodal Moment"), self._reload_load_panel)
+            ttk.Label(form, text="Case").grid(row=2, column=0, sticky="w", pady=2)
+            ttk.Entry(form, textvariable=self.load_case_var, width=10).grid(row=2, column=1, sticky="ew", pady=2)
+            if load_type == "Nodal Moment":
+                ttk.Label(form, text="Mz").grid(row=3, column=0, sticky="w", pady=2)
+                ttk.Entry(form, textvariable=self.mz_var, width=10).grid(row=3, column=1, sticky="ew", pady=2)
+            else:
+                ttk.Label(form, text="Fx").grid(row=3, column=0, sticky="w", pady=2)
+                ttk.Entry(form, textvariable=self.fx_var, width=10).grid(row=3, column=1, sticky="ew", pady=2)
+                ttk.Label(form, text="Fy").grid(row=4, column=0, sticky="w", pady=2)
+                ttk.Entry(form, textvariable=self.fy_var, width=10).grid(row=4, column=1, sticky="ew", pady=2)
+        else:
+            self._combo(
+                form,
+                1,
+                "Type",
+                self.load_type_var,
+                ("Uniformly Distributed Load", "Point Load"),
+                self._reload_load_panel,
+            )
+            self._combo(
+                form,
+                2,
+                "Coordinate System",
+                self.load_coordinate_system_var,
+                ("Member Local Axis", "Global Axis"),
+                self._apply_load_settings,
+            )
+            ttk.Label(form, text="Case").grid(row=3, column=0, sticky="w", pady=2)
+            ttk.Entry(form, textvariable=self.load_case_var, width=10).grid(row=3, column=1, sticky="ew", pady=2)
+            if load_type == "Point Load":
+                self._combo(form, 4, "Direction", self.point_direction_var, ("X", "Y"), self._apply_load_settings)
+                ttk.Label(form, text="P").grid(row=5, column=0, sticky="w", pady=2)
+                ttk.Entry(form, textvariable=self.point_magnitude_var, width=10).grid(row=5, column=1, sticky="ew", pady=2)
+                ttk.Label(form, text="Position a/L").grid(row=6, column=0, sticky="w", pady=2)
+                ttk.Entry(form, textvariable=self.position_var, width=10).grid(row=6, column=1, sticky="ew", pady=2)
+            else:
+                ttk.Label(form, text="wx").grid(row=4, column=0, sticky="w", pady=2)
+                ttk.Entry(form, textvariable=self.wx_var, width=10).grid(row=4, column=1, sticky="ew", pady=2)
+                ttk.Label(form, text="wy").grid(row=5, column=0, sticky="w", pady=2)
+                ttk.Entry(form, textvariable=self.wy_var, width=10).grid(row=5, column=1, sticky="ew", pady=2)
         ttk.Button(self, text="Use These Settings", command=self._apply_load_settings).grid(row=2, column=0, sticky="ew", pady=(8, 0))
         ttk.Label(self, text="Click the selected target type on the canvas.", wraplength=220).grid(row=3, column=0, sticky="nw", pady=(8, 0))
         ttk.Button(self, text="Reset to Default", command=self._reset_current_command).grid(row=4, column=0, sticky="ew", pady=(8, 0))
-        self._sync_load_target()
+        self._apply_load_settings()
 
     def _title(self, text: str) -> None:
         ttk.Label(self, text=text, font=("Segoe UI", 10, "bold")).grid(row=0, column=0, sticky="w")
@@ -397,36 +440,59 @@ class PropertyPanel(ttk.LabelFrame):
         self.status_callback("Assign Support: click a node.")
 
     def _sync_load_target(self) -> None:
-        if self.load_target_var.get() == "Node":
-            self.load_type_var.set("Nodal Force/Moment")
-        elif self.load_type_var.get() == "Nodal Force/Moment":
-            self.load_type_var.set("UDL")
-        self._apply_load_settings()
+        target = self.load_target_var.get()
+        if target == "Node" and self.load_type_var.get() not in ("Nodal Load", "Nodal Moment"):
+            self.load_type_var.set("Nodal Load")
+        elif target == "Member" and self.load_type_var.get() not in ("Uniformly Distributed Load", "Point Load"):
+            self.load_type_var.set("Uniformly Distributed Load")
+        self._reload_load_panel()
+
+    def _reload_load_panel(self) -> None:
+        if self.current_command == "Assign Load":
+            self.show_command("Assign Load")
+        else:
+            self._apply_load_settings()
 
     def _apply_load_settings(self) -> None:
+        target = self.load_target_var.get()
+        load_type = self.load_type_var.get()
+        fx = fy = mz = wx = wy = 0.0
+        position = 0.5
+        backend_load_type = load_type
         try:
-            fx = float(self.fx_var.get())
-            fy = float(self.fy_var.get())
-            mz = float(self.mz_var.get())
-            position = float(self.position_var.get())
+            if target == "Node" and load_type == "Nodal Moment":
+                mz = float(self.mz_var.get())
+            elif target == "Node":
+                fx = float(self.fx_var.get())
+                fy = float(self.fy_var.get())
+            elif load_type == "Point Load":
+                magnitude = float(self.point_magnitude_var.get())
+                position = float(self.position_var.get())
+                if self.point_direction_var.get() == "X":
+                    fx = magnitude
+                else:
+                    fy = magnitude
+                backend_load_type = "Point Load"
+            else:
+                wx = float(self.wx_var.get())
+                wy = float(self.wy_var.get())
+                backend_load_type = "UDL"
         except ValueError:
             self.status_callback("Assign Load: numeric fields are required.")
             return
-        if not 0.0 <= position <= 1.0:
+        if target == "Member" and load_type == "Point Load" and not 0.0 <= position <= 1.0:
             self.status_callback("Assign Load: a/L must be between 0 and 1.")
             return
-        target = self.load_target_var.get()
-        load_type = self.load_type_var.get()
         self.model_canvas.set_load_settings(
             LoadSettings(
                 target=target,
-                load_type=load_type,
+                load_type=backend_load_type,
                 load_case=self.load_case_var.get().strip() or "LC1",
                 fx=fx,
                 fy=fy,
                 mz=mz,
-                wx=fx,
-                wy=fy,
+                wx=wx,
+                wy=wy,
                 position=position,
             )
         )
@@ -517,13 +583,18 @@ class PropertyPanel(ttk.LabelFrame):
             self._apply_support_settings()
         elif command == "Assign Load":
             self.load_target_var.set("Node")
-            self.load_type_var.set("Nodal Force/Moment")
+            self.load_type_var.set("Nodal Load")
             self.load_case_var.set("LC1")
             self.fx_var.set("0.0")
             self.fy_var.set("0.0")
             self.mz_var.set("0.0")
+            self.wx_var.set("0.0")
+            self.wy_var.set("0.0")
+            self.load_coordinate_system_var.set("Member Local Axis")
+            self.point_direction_var.set("Y")
+            self.point_magnitude_var.set("0.0")
             self.position_var.set("0.5")
-            self._apply_load_settings()
+            self._reload_load_panel()
         self.status_callback(f"{command}: settings reset to defaults.")
 
     def _material_ids(self) -> tuple[str, ...]:

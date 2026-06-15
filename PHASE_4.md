@@ -41,13 +41,13 @@ Rules:
 * 4R6 effective EA/EI UI exposure
 * 4R6b section input mode fix + reset-to-default buttons
 * 4R6c direct stiffness section material dependency clarified
+* 4R7 assign load right-pane redesign
 
 Do not break these.
 
 ## Current Subtask Order
 
 ```text
-4R7 — Assign Load right-pane redesign
 4R8 — Load/support visualization correction
 4C0 — ModelBuilder.add_temperature_load helper
 4C — Temperature load UI
@@ -102,78 +102,6 @@ tests/...
 ```
 
 Do not modify controller/solver/math files unless the subtask explicitly requires it and reports why.
-
----
-
-## 4R7 — Assign Load Right-Pane Redesign
-
-Purpose: make Assign Load workflow clear before adding temperature loads.
-
-Right pane layout:
-
-```text
-Target: Node / Member
-```
-
-If Target = Member:
-
-```text
-Type: Uniformly Distributed Load / Point Load
-Coordinate System: Member Local Axis / Global Axis
-```
-
-For Uniformly Distributed Load:
-
-```text
-wx
-wy
-```
-
-For Point Load:
-
-```text
-Direction: X / Y
-Magnitude P
-Position along member: relative 0–1 or distance from i-node
-```
-
-If Target = Node:
-
-```text
-Type: Nodal Load / Nodal Moment
-```
-
-For Nodal Load:
-
-```text
-Fx
-Fy
-```
-
-For Nodal Moment:
-
-```text
-Mz
-```
-
-Rules:
-
-* 2D forces are X/Y only.
-* Moment is Mz only.
-* Do not add Z force.
-* Keep backend load classes unchanged unless current UI cannot call existing builder methods safely.
-* Do not add temperature load here.
-
-Validate:
-
-* Assign nodal Fx/Fy.
-* Assign nodal Mz.
-* Assign member UDL wx/wy.
-* Assign member point load.
-* Wrong target is blocked clearly.
-* Existing tree/inspector still work.
-
----
 
 ## 4R8 — Load/Support Visualization Correction
 
