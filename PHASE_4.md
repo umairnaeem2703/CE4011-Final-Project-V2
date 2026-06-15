@@ -38,13 +38,13 @@ Rules:
 * 4R3 material/section manager UI
 * 4R4 mass placement UX clarification
 * 4R5 effective EA/EI backend support
+* 4R6 effective EA/EI UI exposure
 
 Do not break these.
 
 ## Current Subtask Order
 
 ```text
-4R6 — Effective EA/EI UI exposure
 4R7 — Assign Load right-pane redesign
 4R8 — Load/support visualization correction
 4C0 — ModelBuilder.add_temperature_load helper
@@ -100,33 +100,6 @@ tests/...
 ```
 
 Do not modify controller/solver/math files unless the subtask explicitly requires it and reports why.
-
----
-
-## 4R6 — Effective EA/EI UI Exposure
-
-Purpose: expose optional EA/EI in material/section manager after backend support exists.
-
-Requirements:
-
-* Section manager fields: `A`, `I`, `d`, optional `EA`, optional `EI`.
-* Label EA/EI as optional direct stiffness override.
-* If EA/EI blank, backend uses `E*A` and `E*I`.
-* Inspector/object tree shows EA/EI only when provided.
-* Use ModelBuilder only.
-
-Rules:
-
-* UI-only unless a tiny builder bridge is missing.
-* No solver math in UI.
-* No temperature UI.
-
-Validate:
-
-* Create section with A/I only.
-* Create section with EA/EI override.
-* Draw members with both sections.
-* Inspector shows correct section data.
 
 ---
 

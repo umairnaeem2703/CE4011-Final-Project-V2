@@ -45,7 +45,7 @@ class ObjectTreePanel(ttk.LabelFrame):
                 parents["Sections"],
                 "end",
                 iid=f"section:{section_id}",
-                text=f"{section_id} (A={section.A:.3g}, I={section.I:.3g})",
+                text=f"{section_id} ({_section_summary(section)})",
             )
         for node_id in sorted(model.nodes):
             self.tree.insert(parents["Nodes"], "end", iid=f"node:{node_id}", text=f"Node {node_id}")
@@ -114,3 +114,12 @@ def _mass_summary(mass) -> str:
         f"mass_uy={mass.mass_uy:.3g}, "
         f"mass_rz={mass.inertia_rz:.3g}"
     )
+
+
+def _section_summary(section) -> str:
+    parts = [f"A={section.A:.3g}", f"I={section.I:.3g}", f"d={section.d:.3g}"]
+    if getattr(section, "EA", None) is not None:
+        parts.append(f"EA={section.EA:.3g}")
+    if getattr(section, "EI", None) is not None:
+        parts.append(f"EI={section.EI:.3g}")
+    return ", ".join(parts)

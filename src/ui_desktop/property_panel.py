@@ -36,6 +36,8 @@ class PropertyPanel(ttk.LabelFrame):
         self.section_a_var = tk.StringVar(value="1.0")
         self.section_i_var = tk.StringVar(value="1.0")
         self.section_d_var = tk.StringVar(value="0.0")
+        self.section_ea_var = tk.StringVar(value="")
+        self.section_ei_var = tk.StringVar(value="")
         self.draw_mode_var = tk.StringVar(value="Click end node")
         self.support_type_var = tk.StringVar(value="fixed")
         self.restrain_ux_var = tk.BooleanVar(value=True)
@@ -145,7 +147,7 @@ class PropertyPanel(ttk.LabelFrame):
                 ("Node i", element.node_i.id),
                 ("Node j", element.node_j.id),
                 ("Material", element.material.id),
-                ("Section", element.section.id),
+                ("Section", _section_summary(element.section)),
                 ("Loads", loads_text),
             ]
         else:
@@ -196,8 +198,12 @@ class PropertyPanel(ttk.LabelFrame):
         ttk.Entry(section, textvariable=self.section_i_var, width=12).grid(row=2, column=1, sticky="ew", pady=2)
         ttk.Label(section, text="d/depth").grid(row=3, column=0, sticky="w", pady=2)
         ttk.Entry(section, textvariable=self.section_d_var, width=12).grid(row=3, column=1, sticky="ew", pady=2)
+        ttk.Label(section, text="EA override (optional)").grid(row=4, column=0, sticky="w", pady=2)
+        ttk.Entry(section, textvariable=self.section_ea_var, width=12).grid(row=4, column=1, sticky="ew", pady=2)
+        ttk.Label(section, text="EI override (optional)").grid(row=5, column=0, sticky="w", pady=2)
+        ttk.Entry(section, textvariable=self.section_ei_var, width=12).grid(row=5, column=1, sticky="ew", pady=2)
         ttk.Button(section, text="Add / Update Section", command=self._add_section).grid(
-            row=4,
+            row=6,
             column=0,
             columnspan=2,
             sticky="ew",
@@ -387,10 +393,12 @@ class PropertyPanel(ttk.LabelFrame):
             A = float(self.section_a_var.get())
             I = float(self.section_i_var.get())
             d = float(self.section_d_var.get())
+            EA = _optional_float(self.section_ea_var.get())
+            EI = _optional_float(self.section_ei_var.get())
         except ValueError:
-            self.status_callback("Section: A, I, and d/depth must be numeric.")
+            self.status_callback("Section: A, I, d/depth, EA, and EI must be numeric when provided.")
             return
-        self.model_canvas.builder.add_section(section_id, A=A, I=I, d=d)
+        self.model_canvas.builder.add_section(section_id, A=A, I=I, d=d, EA=EA, EI=EI)
         self.section_var.set(section_id)
         self.model_canvas.set_active_section(section_id)
         self.model_canvas.change_callback()
@@ -445,6 +453,20 @@ def _mass_summary(model, node_id: int) -> str:
         f"mass_uy={mass.mass_uy:.3g}, "
         f"mass_rz={mass.inertia_rz:.3g}"
     )
+
+
+def _section_summary(section) -> str:
+    parts = [f"A={section.A:.3g}", f"I={section.I:.3g}", f"d={section.d:.3g}"]
+    if getattr(section, "EA", None) is not None:
+        parts.append(f"EA={section.EA:.3g}")
+    if getattr(section, "EI", None) is not None:
+        parts.append(f"EI={section.EI:.3g}")
+    return f"{section.id} ({', '.join(parts)})"
+
+
+def _optional_float(value: str) -> float | None:
+    text = value.strip()
+    return None if not text else float(text)
 
 
 def _member_load_summary(model, element_id: str) -> str:
