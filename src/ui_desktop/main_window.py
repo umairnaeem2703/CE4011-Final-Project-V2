@@ -16,6 +16,7 @@ COMMANDS = (
     "Select / Inspect",
     "Draw Node",
     "Draw Member",
+    "Materials / Sections",
     "Assign Support",
     "Assign Load",
     "Assign Mass",

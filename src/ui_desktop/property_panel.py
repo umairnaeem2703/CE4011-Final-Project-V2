@@ -27,6 +27,15 @@ class PropertyPanel(ttk.LabelFrame):
         self.element_type_var = tk.StringVar(value="frame")
         self.material_var = tk.StringVar(value="M1")
         self.section_var = tk.StringVar(value="S1")
+        self.material_id_var = tk.StringVar(value="M1")
+        self.material_type_var = tk.StringVar(value="Generic")
+        self.material_e_var = tk.StringVar(value="1.0")
+        self.material_alpha_var = tk.StringVar(value="0.0")
+        self.material_density_var = tk.StringVar(value="0.0")
+        self.section_id_var = tk.StringVar(value="S1")
+        self.section_a_var = tk.StringVar(value="1.0")
+        self.section_i_var = tk.StringVar(value="1.0")
+        self.section_d_var = tk.StringVar(value="0.0")
         self.draw_mode_var = tk.StringVar(value="Click end node")
         self.support_type_var = tk.StringVar(value="fixed")
         self.restrain_ux_var = tk.BooleanVar(value=True)
@@ -55,6 +64,8 @@ class PropertyPanel(ttk.LabelFrame):
             self._draw_node_panel()
         elif command == "Draw Member":
             self._draw_member_panel()
+        elif command == "Materials / Sections":
+            self._materials_sections_panel()
         elif command == "Select / Inspect":
             self._inspect_panel()
         elif command == "Assign Load":
@@ -149,6 +160,48 @@ class PropertyPanel(ttk.LabelFrame):
     def _placeholder_panel(self, title: str, text: str) -> None:
         self._title(title)
         ttk.Label(self, text=text, wraplength=220).grid(row=1, column=0, sticky="nw", pady=(8, 0))
+
+    def _materials_sections_panel(self) -> None:
+        self._title("Materials / Sections")
+
+        material = ttk.LabelFrame(self, text="Material", padding=6)
+        material.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        material.columnconfigure(1, weight=1)
+        ttk.Label(material, text="id/name").grid(row=0, column=0, sticky="w", pady=2)
+        ttk.Entry(material, textvariable=self.material_id_var, width=12).grid(row=0, column=1, sticky="ew", pady=2)
+        self._combo(material, 1, "Type", self.material_type_var, ("Generic", "Steel", "Concrete"), lambda: None)
+        ttk.Label(material, text="E").grid(row=2, column=0, sticky="w", pady=2)
+        ttk.Entry(material, textvariable=self.material_e_var, width=12).grid(row=2, column=1, sticky="ew", pady=2)
+        ttk.Label(material, text="alpha").grid(row=3, column=0, sticky="w", pady=2)
+        ttk.Entry(material, textvariable=self.material_alpha_var, width=12).grid(row=3, column=1, sticky="ew", pady=2)
+        ttk.Label(material, text="density").grid(row=4, column=0, sticky="w", pady=2)
+        ttk.Entry(material, textvariable=self.material_density_var, width=12).grid(row=4, column=1, sticky="ew", pady=2)
+        ttk.Button(material, text="Add / Update Material", command=self._add_material).grid(
+            row=5,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            pady=(6, 0),
+        )
+
+        section = ttk.LabelFrame(self, text="Section", padding=6)
+        section.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        section.columnconfigure(1, weight=1)
+        ttk.Label(section, text="id/name").grid(row=0, column=0, sticky="w", pady=2)
+        ttk.Entry(section, textvariable=self.section_id_var, width=12).grid(row=0, column=1, sticky="ew", pady=2)
+        ttk.Label(section, text="A").grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Entry(section, textvariable=self.section_a_var, width=12).grid(row=1, column=1, sticky="ew", pady=2)
+        ttk.Label(section, text="I").grid(row=2, column=0, sticky="w", pady=2)
+        ttk.Entry(section, textvariable=self.section_i_var, width=12).grid(row=2, column=1, sticky="ew", pady=2)
+        ttk.Label(section, text="d/depth").grid(row=3, column=0, sticky="w", pady=2)
+        ttk.Entry(section, textvariable=self.section_d_var, width=12).grid(row=3, column=1, sticky="ew", pady=2)
+        ttk.Button(section, text="Add / Update Section", command=self._add_section).grid(
+            row=4,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            pady=(6, 0),
+        )
 
     def _support_panel(self) -> None:
         self._title("Assign Support")
@@ -305,6 +358,42 @@ class PropertyPanel(ttk.LabelFrame):
             )
         )
         self.status_callback("Assign Load: click a node." if target == "Node" else "Assign Load: click a member.")
+
+    def _add_material(self) -> None:
+        material_id = self.material_id_var.get().strip()
+        if not material_id:
+            self.status_callback("Material: id/name is required.")
+            return
+        try:
+            E = float(self.material_e_var.get())
+            alpha = float(self.material_alpha_var.get())
+            density = float(self.material_density_var.get())
+        except ValueError:
+            self.status_callback("Material: E, alpha, and density must be numeric.")
+            return
+        self.model_canvas.builder.add_material(material_id, E=E, alpha=alpha, density=density)
+        self.material_var.set(material_id)
+        self.model_canvas.set_active_material(material_id)
+        self.model_canvas.change_callback()
+        self.status_callback(f"Material {material_id} saved.")
+
+    def _add_section(self) -> None:
+        section_id = self.section_id_var.get().strip()
+        if not section_id:
+            self.status_callback("Section: id/name is required.")
+            return
+        try:
+            A = float(self.section_a_var.get())
+            I = float(self.section_i_var.get())
+            d = float(self.section_d_var.get())
+        except ValueError:
+            self.status_callback("Section: A, I, and d/depth must be numeric.")
+            return
+        self.model_canvas.builder.add_section(section_id, A=A, I=I, d=d)
+        self.section_var.set(section_id)
+        self.model_canvas.set_active_section(section_id)
+        self.model_canvas.change_callback()
+        self.status_callback(f"Section {section_id} saved.")
 
     def _material_ids(self) -> tuple[str, ...]:
         return tuple(self.model_canvas.builder.model.materials.keys()) or ("M1",)

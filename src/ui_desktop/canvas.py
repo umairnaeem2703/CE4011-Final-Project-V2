@@ -138,6 +138,8 @@ class ModelCanvas(ttk.Frame):
             if self.pending_start_node_id is None:
                 return "Draw Member: select start node."
             return "Draw Member: select end node or enter length/angle."
+        if self.active_command == "Materials / Sections":
+            return "Materials / Sections: define reusable material and section properties."
         if self.active_command == "Assign Load":
             return "Assign Load: choose load settings, then click target."
         if self.active_command == "Assign Support":

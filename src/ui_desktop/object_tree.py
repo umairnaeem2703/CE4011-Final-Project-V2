@@ -13,7 +13,7 @@ SelectionCallback = Callable[[str, str], None]
 class ObjectTreePanel(ttk.LabelFrame):
     """Displays model objects grouped by type."""
 
-    GROUPS = ("Nodes", "Elements", "Supports", "Loads", "Masses", "Diaphragms")
+    GROUPS = ("Materials", "Sections", "Nodes", "Elements", "Supports", "Loads", "Masses", "Diaphragms")
 
     def __init__(self, parent, *, selection_callback: SelectionCallback | None = None) -> None:
         super().__init__(parent, text="Objects", padding=6)
@@ -31,6 +31,22 @@ class ObjectTreePanel(ttk.LabelFrame):
         self.tree.delete(*self.tree.get_children())
         parents = {group: self.tree.insert("", "end", text=group, open=True) for group in self.GROUPS}
 
+        for material_id in sorted(model.materials):
+            material = model.materials[material_id]
+            self.tree.insert(
+                parents["Materials"],
+                "end",
+                iid=f"material:{material_id}",
+                text=f"{material_id} (E={material.E:.3g})",
+            )
+        for section_id in sorted(model.sections):
+            section = model.sections[section_id]
+            self.tree.insert(
+                parents["Sections"],
+                "end",
+                iid=f"section:{section_id}",
+                text=f"{section_id} (A={section.A:.3g}, I={section.I:.3g})",
+            )
         for node_id in sorted(model.nodes):
             self.tree.insert(parents["Nodes"], "end", iid=f"node:{node_id}", text=f"Node {node_id}")
         for element_id in sorted(model.elements):
