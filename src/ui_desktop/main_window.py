@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import filedialog, ttk
+from collections.abc import Mapping, Sequence
 
 try:
     from ui.static_analysis import run_static_analysis
@@ -88,6 +89,8 @@ class MainWindow:
         self.status_message = tk.StringVar(value="Select / Inspect: click a node or member to inspect it.")
         self.latest_static_results = None
         self.static_analysis_error = None
+        self.result_view_category = None
+        self.result_view_tree = None
 
         self._configure_grid()
         self._build_command_area()
@@ -249,6 +252,9 @@ class MainWindow:
         if name == "Run Static Analysis":
             self._run_static_analysis()
             return
+        if name == "Results":
+            self._show_static_results()
+            return
         self._write_status(f"{name}: not wired yet.")
 
     def _run_static_analysis(self) -> None:
@@ -268,6 +274,132 @@ class MainWindow:
             f"Static analysis complete for {load_case}: "
             f"{displacement_count} displacement rows, {reaction_count} reaction rows."
         )
+
+    def _show_static_results(self) -> None:
+        window = tk.Toplevel(self.root)
+        window.title("Static Results")
+        window.geometry("760x420")
+        window.columnconfigure(0, weight=1)
+        window.rowconfigure(1, weight=1)
+
+        if self.latest_static_results is None:
+            ttk.Label(window, text="Run Static Analysis first.").grid(row=0, column=0, sticky="w", padx=10, pady=10)
+            self._write_status("Run Static Analysis first.")
+            return
+
+        categories = tuple(self._static_result_categories())
+        self.result_view_category = tk.StringVar(value=categories[0])
+        selector = ttk.Combobox(window, textvariable=self.result_view_category, values=categories, state="readonly")
+        selector.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 6))
+        selector.bind("<<ComboboxSelected>>", lambda _event: self._refresh_static_result_table())
+
+        frame = ttk.Frame(window)
+        frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
+        self.result_view_tree = ttk.Treeview(frame, show="headings")
+        y_scroll = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=self.result_view_tree.yview)
+        x_scroll = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=self.result_view_tree.xview)
+        self.result_view_tree.configure(yscrollcommand=y_scroll.set, xscrollcommand=x_scroll.set)
+        self.result_view_tree.grid(row=0, column=0, sticky="nsew")
+        y_scroll.grid(row=0, column=1, sticky="ns")
+        x_scroll.grid(row=1, column=0, sticky="ew")
+        self._refresh_static_result_table()
+        self._write_status("Static results opened.")
+
+    def _static_result_categories(self) -> list[str]:
+        return [
+            "Nodal Displacements",
+            "Support Reactions",
+            "Member End Forces",
+            "DOF Map",
+            "Matrix Summary",
+        ]
+
+    def _refresh_static_result_table(self) -> None:
+        if self.result_view_tree is None or self.result_view_category is None:
+            return
+        columns, rows = self._static_result_table_data(self.result_view_category.get())
+        tree = self.result_view_tree
+        tree.delete(*tree.get_children())
+        tree.configure(columns=columns)
+        for column in columns:
+            tree.heading(column, text=column)
+            tree.column(column, width=120, anchor="w", stretch=True)
+        for row in rows:
+            tree.insert("", "end", values=row)
+
+    def _static_result_table_data(self, category: str) -> tuple[tuple[str, ...], list[tuple[str, ...]]]:
+        results = self.latest_static_results
+        if results is None:
+            return (("Message",), [("Run Static Analysis first.",)])
+        if category == "Nodal Displacements":
+            return (("Node", "UX", "UY", "RZ"), self._vector_rows(results.displacements))
+        if category == "Support Reactions":
+            return (("Node", "FX", "FY", "MZ"), self._vector_rows(results.reactions))
+        if category == "Member End Forces":
+            return self._member_force_rows(results.element_forces)
+        if category == "DOF Map":
+            return self._mapping_rows(results.dof_map)
+        if category == "Matrix Summary":
+            return (
+                ("Item", "Rows", "Columns"),
+                [
+                    self._matrix_summary_row("K", results.K),
+                    self._matrix_summary_row("Kff", results.Kff),
+                    self._matrix_summary_row("F", results.F),
+                    self._matrix_summary_row("Ff", results.Ff),
+                ],
+            )
+        return (("Message",), [("No result data available.",)])
+
+    def _vector_rows(self, values_by_id: Mapping[object, object]) -> list[tuple[str, ...]]:
+        rows = []
+        for key, values in values_by_id.items():
+            vector = self._as_sequence(values)
+            rows.append((str(key), self._format_value_at(vector, 0), self._format_value_at(vector, 1), self._format_value_at(vector, 2)))
+        return rows or [("-", "-", "-", "-")]
+
+    def _member_force_rows(self, element_forces: Mapping[object, object]) -> tuple[tuple[str, ...], list[tuple[str, ...]]]:
+        rows = []
+        for element_id, forces in element_forces.items():
+            if isinstance(forces, Mapping):
+                for label, values in forces.items():
+                    vector = self._as_sequence(values)
+                    rows.append((str(element_id), str(label), ", ".join(self._format_number(value) for value in vector)))
+            else:
+                vector = self._as_sequence(forces)
+                rows.append((str(element_id), "end forces", ", ".join(self._format_number(value) for value in vector)))
+        return (("Element", "Location", "Values"), rows or [("-", "-", "-")])
+
+    def _mapping_rows(self, mapping: Mapping[object, object]) -> tuple[tuple[str, ...], list[tuple[str, ...]]]:
+        rows = [(str(key), str(value)) for key, value in mapping.items()]
+        return (("DOF", "Map Entry"), rows or [("-", "-")])
+
+    def _matrix_summary_row(self, name: str, matrix: object) -> tuple[str, str, str]:
+        if not isinstance(matrix, Sequence) or isinstance(matrix, (str, bytes)):
+            return (name, "0", "0")
+        row_count = len(matrix)
+        if row_count == 0:
+            return (name, "0", "0")
+        first_row = matrix[0]
+        column_count = len(first_row) if isinstance(first_row, Sequence) and not isinstance(first_row, (str, bytes)) else 1
+        return (name, str(row_count), str(column_count))
+
+    def _as_sequence(self, values: object) -> tuple[object, ...]:
+        if isinstance(values, Sequence) and not isinstance(values, (str, bytes)):
+            return tuple(values)
+        return (values,)
+
+    def _format_value_at(self, values: Sequence[object], index: int) -> str:
+        if index >= len(values):
+            return "-"
+        return self._format_number(values[index])
+
+    def _format_number(self, value: object) -> str:
+        if isinstance(value, (int, float)):
+            return f"{value:.6g}"
+        return str(value)
 
     def _new_model(self) -> None:
         builder = ask_new_model(self.root)
