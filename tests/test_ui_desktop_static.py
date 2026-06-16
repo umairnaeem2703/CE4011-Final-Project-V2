@@ -1,9 +1,11 @@
 import os
 import sys
 from types import SimpleNamespace
+from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
+from model_builder import ModelBuilder
 from ui_desktop import main_window
 from ui_desktop.result_formatting import format_matrix, format_scalar
 
@@ -15,6 +17,8 @@ def _window_with_model(model=object()):
     window._write_status = window.messages.append
     window.latest_static_results = None
     window.static_analysis_error = None
+    window.result_view_category = None
+    window.result_view_tree = None
     window.result_display_tolerance = 0.001
     window.result_tolerance_var = None
     return window
@@ -147,3 +151,111 @@ def test_desktop_static_result_table_empty_state():
 
     assert columns == ("Message",)
     assert rows == [("Run Static Analysis first.",)]
+
+
+def test_desktop_open_xml_replaces_builder_refreshes_ui_and_clears_results(tmp_path, monkeypatch):
+    builder = ModelBuilder(name="Imported Desktop Model")
+    builder.add_material("m1", E=200000.0)
+    builder.add_section("s1", A=0.02, I=0.0001)
+    builder.add_node(1, 0.0, 0.0)
+    builder.add_node(2, 3.0, 0.0, is_hinged=True)
+    builder.add_element("e1", "frame", 1, 2, "m1", "s1")
+    xml_path = tmp_path / "desktop_import.xml"
+    builder.export_xml(xml_path)
+
+    window = _window_with_model()
+    window.root = object()
+    window.selected_command = SimpleNamespace(get=lambda: "Assign Load")
+    events = []
+    window.model_canvas = SimpleNamespace(
+        builder=SimpleNamespace(model=SimpleNamespace(name="Old Model")),
+        load_builder=lambda loaded_builder: events.append(("load_builder", loaded_builder.model.name)) or setattr(window.model_canvas, "builder", loaded_builder),
+        restore_full_view=lambda notify=False: events.append(("restore_full_view", notify)),
+    )
+    window.object_tree = SimpleNamespace(select_objects=lambda selection: events.append(("tree_select", selection)))
+    window.property_panel = SimpleNamespace(
+        show_selection=lambda kind, obj: events.append(("panel_selection", kind, obj)),
+        sync_from_canvas=lambda: events.append(("sync_from_canvas", None)),
+        show_command=lambda command: events.append(("show_command", command)),
+    )
+    window._refresh_object_tree = lambda: events.append(("refresh_object_tree", None))
+    monkeypatch.setattr(main_window.filedialog, "askopenfilename", lambda **_kwargs: str(xml_path))
+    errors = []
+    monkeypatch.setattr(main_window.messagebox, "showerror", lambda *args, **kwargs: errors.append((args, kwargs)))
+
+    window.latest_static_results = object()
+    window.static_analysis_error = "old error"
+    window.result_view_category = "Nodal Displacements"
+    window.result_view_tree = object()
+
+    window._toolbar_action("Open XML")
+
+    assert window.model_canvas.builder.model.name == "Imported Desktop Model"
+    assert window.latest_static_results is None
+    assert window.static_analysis_error is None
+    assert window.result_view_category is None
+    assert window.result_view_tree is None
+    assert ("refresh_object_tree", None) in events
+    assert ("tree_select", None) in events
+    assert ("panel_selection", None, None) in events
+    assert ("sync_from_canvas", None) in events
+    assert ("show_command", "Assign Load") in events
+    assert ("restore_full_view", False) in events
+    assert errors == []
+    assert window.messages[-1] == f"Opened XML: {xml_path}"
+
+
+def test_desktop_open_xml_reports_failure_and_keeps_current_model(monkeypatch):
+    window = _window_with_model(model=SimpleNamespace(name="Current Model"))
+    window.root = object()
+    window.selected_command = SimpleNamespace(get=lambda: "Select / Inspect")
+    window.property_panel = SimpleNamespace(show_selection=lambda kind, obj: None, sync_from_canvas=lambda: None, show_command=lambda command: None)
+    window.object_tree = SimpleNamespace(select_objects=lambda selection: None)
+    monkeypatch.setattr(main_window.filedialog, "askopenfilename", lambda **_kwargs: str(Path("broken.xml")))
+    monkeypatch.setattr(main_window, "XMLParser", lambda _path: SimpleNamespace(parse=lambda: (_ for _ in ()).throw(ValueError("bad xml"))))
+    errors = []
+    monkeypatch.setattr(main_window.messagebox, "showerror", lambda *args, **kwargs: errors.append((args, kwargs)))
+
+    window._toolbar_action("Open XML")
+
+    assert window.model_canvas.builder.model.name == "Current Model"
+    assert window.messages[-1] == "Open XML failed: bad xml"
+    assert len(errors) == 1
+
+
+def test_desktop_validate_model_reports_success_without_dialog(monkeypatch):
+    window = _window_with_model(model=SimpleNamespace(name="Current Model"))
+    window.root = object()
+    errors = []
+    monkeypatch.setattr(main_window.messagebox, "showerror", lambda *args, **kwargs: errors.append((args, kwargs)))
+    validator_calls = []
+    monkeypatch.setattr(
+        main_window,
+        "StructuralValidator",
+        lambda model: SimpleNamespace(validate=lambda: validator_calls.append(model)),
+    )
+
+    window._toolbar_action("Validate")
+
+    assert validator_calls == [window.model_canvas.builder.model]
+    assert window.messages[-1] == "Model validation passed."
+    assert errors == []
+
+
+def test_desktop_validate_model_reports_validator_failure(monkeypatch):
+    window = _window_with_model(model=SimpleNamespace(name="Current Model"))
+    window.root = object()
+    errors = []
+    monkeypatch.setattr(main_window.messagebox, "showerror", lambda *args, **kwargs: errors.append((args, kwargs)))
+    monkeypatch.setattr(
+        main_window,
+        "StructuralValidator",
+        lambda model: SimpleNamespace(
+            validate=lambda: (_ for _ in ()).throw(main_window.UnstableStructureError("No boundary conditions defined. Structure is entirely unsupported."))
+        ),
+    )
+
+    window._toolbar_action("Validate")
+
+    assert window.messages[-1] == "No boundary conditions defined. Structure is entirely unsupported."
+    assert len(errors) == 1

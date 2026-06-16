@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, messagebox, ttk
 from collections.abc import Mapping
 
 try:
+    from banded_solver import UnstableStructureError
+    from model_builder import ModelBuilder
+    from parser import XMLParser
+    from structural_validator import StructuralValidator
     from ui.static_analysis import run_static_analysis
 except ImportError:  # pragma: no cover - used when launched as python -m src.ui_desktop.app
+    from ..banded_solver import UnstableStructureError
+    from ..model_builder import ModelBuilder
+    from ..parser import XMLParser
+    from ..structural_validator import StructuralValidator
     from ..ui.static_analysis import run_static_analysis
 
 from .canvas import ModelCanvas
@@ -257,8 +265,14 @@ class MainWindow:
         if name == "New":
             self._new_model()
             return
+        if name == "Open XML":
+            self._open_xml()
+            return
         if name == "Save XML":
             self._save_xml()
+            return
+        if name == "Validate":
+            self._validate_model()
             return
         if name == "Run Static Analysis":
             self._run_static_analysis()
@@ -471,15 +485,48 @@ class MainWindow:
         if builder is None:
             self._write_status("New model canceled.")
             return
-        self.model_canvas.load_builder(builder)
-        self.property_panel.sync_from_canvas()
-        self.property_panel.show_command(self.selected_command.get())
-        self.latest_static_results = None
-        self.static_analysis_error = None
-        self._refresh_object_tree()
+        self._replace_desktop_model(builder, fit_view=False)
         self._write_status(f"New model created: {builder.model.name}.")
         for message in getattr(builder, "creation_messages", []):
             self._write_status(message)
+
+    def _open_xml(self) -> None:
+        path = filedialog.askopenfilename(
+            parent=self.root,
+            title="Open Model XML",
+            filetypes=(("XML files", "*.xml"), ("All files", "*.*")),
+        )
+        if not path:
+            self._write_status("Open XML canceled.")
+            return
+        try:
+            model = XMLParser(path).parse()
+            builder = ModelBuilder(model=model)
+        except Exception as exc:
+            messagebox.showerror("Open XML Failed", f"Could not load XML model:\n{exc}", parent=self.root)
+            self._write_status(f"Open XML failed: {exc}")
+            return
+
+        self._replace_desktop_model(builder, fit_view=True)
+        self._write_status(f"Opened XML: {path}")
+
+    def _replace_desktop_model(self, builder, *, fit_view: bool) -> None:
+        self.model_canvas.load_builder(builder)
+        if fit_view and hasattr(self.model_canvas, "restore_full_view"):
+            self.model_canvas.restore_full_view(notify=False)
+        elif hasattr(self.model_canvas, "refresh_canvas"):
+            self.model_canvas.refresh_canvas()
+        self._refresh_object_tree()
+        self._show_selection(None, None)
+        self.property_panel.sync_from_canvas()
+        self.property_panel.show_command(self.selected_command.get())
+        self._reset_analysis_state()
+
+    def _reset_analysis_state(self) -> None:
+        self.latest_static_results = None
+        self.static_analysis_error = None
+        self.result_view_category = None
+        self.result_view_tree = None
 
     def _save_xml(self) -> None:
         path = filedialog.asksaveasfilename(
@@ -497,6 +544,21 @@ class MainWindow:
             self._write_status(f"Save XML failed: {exc}")
             return
         self._write_status(f"Saved XML: {path}")
+
+    def _validate_model(self) -> None:
+        try:
+            StructuralValidator(self.model_canvas.builder.model).validate()
+        except UnstableStructureError as exc:
+            message = str(exc) or "Model validation failed."
+            messagebox.showerror("Model Validation Failed", message, parent=self.root)
+            self._write_status(message)
+            return
+        except Exception as exc:
+            message = str(exc) or "Model validation failed."
+            messagebox.showerror("Model Validation Failed", message, parent=self.root)
+            self._write_status(message)
+            return
+        self._write_status("Model validation passed.")
 
     def _show_selection(self, kind: str | None, obj: object | None) -> None:
         self.property_panel.show_selection(kind, obj)
