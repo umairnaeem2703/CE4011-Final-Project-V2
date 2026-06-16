@@ -62,8 +62,10 @@ class PropertyPanel(ttk.LabelFrame):
         self.mz_var = tk.StringVar(value="0.0")
         self.wx_var = tk.StringVar(value="0.0")
         self.wy_var = tk.StringVar(value="0.0")
-        self.load_coordinate_system_var = tk.StringVar(value="Member Local Axis")
-        self.point_direction_var = tk.StringVar(value="Y")
+        self.load_coordinate_system_var = tk.StringVar(value="Local")
+        self.member_load_direction_var = tk.StringVar(value="2")
+        self.udl_magnitude_var = tk.StringVar(value="0.0")
+        self.point_direction_var = tk.StringVar(value="2")
         self.point_magnitude_var = tk.StringVar(value="0.0")
         self.position_var = tk.StringVar(value="0.5")
         self.temperature_tu_var = tk.StringVar(value="0.0")
@@ -366,27 +368,42 @@ class PropertyPanel(ttk.LabelFrame):
                     3,
                     "Coordinate System",
                     self.load_coordinate_system_var,
-                    ("Member Local Axis", "Global Axis"),
-                    self._apply_load_settings,
+                    ("Local", "Global"),
+                    self._sync_member_load_coordinate_system,
                 )
+                direction_values = self._member_load_direction_values()
+                if load_type == "Point Load":
+                    if self.point_direction_var.get() not in direction_values:
+                        self.point_direction_var.set(direction_values[-1])
+                elif self.member_load_direction_var.get() not in direction_values:
+                    self.member_load_direction_var.set(direction_values[-1])
             ttk.Label(form, text="Case").grid(row=4, column=0, sticky="w", pady=2)
             ttk.Entry(form, textvariable=self.load_case_var, width=10).grid(row=4, column=1, sticky="ew", pady=2)
             if load_type == "Point Load":
-                self._combo(form, 5, "Direction", self.point_direction_var, ("X", "Y"), self._apply_load_settings)
+                self._combo(form, 5, "Direction", self.point_direction_var, direction_values, self._apply_load_settings)
                 ttk.Label(form, text="P").grid(row=6, column=0, sticky="w", pady=2)
                 ttk.Entry(form, textvariable=self.point_magnitude_var, width=10).grid(row=6, column=1, sticky="ew", pady=2)
                 ttk.Label(form, text="Position a/L").grid(row=7, column=0, sticky="w", pady=2)
                 ttk.Entry(form, textvariable=self.position_var, width=10).grid(row=7, column=1, sticky="ew", pady=2)
+                ttk.Label(
+                    self,
+                    text="Local 1 = member i-to-j axis. Local 2 = transverse axis.",
+                    wraplength=220,
+                ).grid(row=5, column=0, sticky="nw", pady=(8, 0))
             elif load_type == "Temperature":
                 ttk.Label(form, text="Tu").grid(row=5, column=0, sticky="w", pady=2)
                 ttk.Entry(form, textvariable=self.temperature_tu_var, width=10).grid(row=5, column=1, sticky="ew", pady=2)
                 ttk.Label(form, text="Tb").grid(row=6, column=0, sticky="w", pady=2)
                 ttk.Entry(form, textvariable=self.temperature_tb_var, width=10).grid(row=6, column=1, sticky="ew", pady=2)
             else:
-                ttk.Label(form, text="wx").grid(row=5, column=0, sticky="w", pady=2)
-                ttk.Entry(form, textvariable=self.wx_var, width=10).grid(row=5, column=1, sticky="ew", pady=2)
-                ttk.Label(form, text="wy").grid(row=6, column=0, sticky="w", pady=2)
-                ttk.Entry(form, textvariable=self.wy_var, width=10).grid(row=6, column=1, sticky="ew", pady=2)
+                self._combo(form, 5, "Direction", self.member_load_direction_var, direction_values, self._apply_load_settings)
+                ttk.Label(form, text="w").grid(row=6, column=0, sticky="w", pady=2)
+                ttk.Entry(form, textvariable=self.udl_magnitude_var, width=10).grid(row=6, column=1, sticky="ew", pady=2)
+                ttk.Label(
+                    self,
+                    text="Local 1 = member i-to-j axis. Local 2 = transverse axis.",
+                    wraplength=220,
+                ).grid(row=5, column=0, sticky="nw", pady=(8, 0))
         ttk.Button(self, text="Use These Settings", command=self._apply_load_settings).grid(row=2, column=0, sticky="ew", pady=(8, 0))
         ttk.Label(self, text="Click the selected target type on the canvas.", wraplength=220).grid(row=3, column=0, sticky="nw", pady=(8, 0))
         ttk.Button(self, text="Reset to Default", command=self._reset_current_command).grid(row=4, column=0, sticky="ew", pady=(8, 0))
@@ -597,6 +614,17 @@ class PropertyPanel(ttk.LabelFrame):
             self.load_type_var.set("Uniformly Distributed Load")
         self._reload_load_panel()
 
+    def _sync_member_load_coordinate_system(self) -> None:
+        values = self._member_load_direction_values()
+        if self.point_direction_var.get() not in values:
+            self.point_direction_var.set(values[-1])
+        if self.member_load_direction_var.get() not in values:
+            self.member_load_direction_var.set(values[-1])
+        self._reload_load_panel()
+
+    def _member_load_direction_values(self) -> tuple[str, str]:
+        return ("X", "Y") if self.load_coordinate_system_var.get() == "Global" else ("1", "2")
+
     def _reload_load_panel(self) -> None:
         if self.current_command == "Assign Load":
             self.show_command("Assign Load")
@@ -609,6 +637,9 @@ class PropertyPanel(ttk.LabelFrame):
         fx = fy = mz = wx = wy = 0.0
         position = 0.5
         backend_load_type = load_type
+        coord_system = "local"
+        direction = ""
+        value = None
         try:
             if target == "Node" and load_type == "Nodal Moment":
                 mz = float(self.mz_var.get())
@@ -618,7 +649,10 @@ class PropertyPanel(ttk.LabelFrame):
             elif load_type == "Point Load":
                 magnitude = float(self.point_magnitude_var.get())
                 position = float(self.position_var.get())
-                if self.point_direction_var.get() == "X":
+                coord_system = self.load_coordinate_system_var.get().lower()
+                direction = self.point_direction_var.get()
+                value = magnitude
+                if direction in ("X", "1"):
                     fx = magnitude
                 else:
                     fy = magnitude
@@ -628,8 +662,14 @@ class PropertyPanel(ttk.LabelFrame):
                 wy = float(self.temperature_tb_var.get())
                 backend_load_type = "Temperature"
             else:
-                wx = float(self.wx_var.get())
-                wy = float(self.wy_var.get())
+                magnitude = float(self.udl_magnitude_var.get())
+                coord_system = self.load_coordinate_system_var.get().lower()
+                direction = self.member_load_direction_var.get()
+                value = magnitude
+                if direction in ("X", "1"):
+                    wx = magnitude
+                else:
+                    wy = magnitude
                 backend_load_type = "UDL"
         except ValueError:
             self.status_callback("Assign Load: numeric fields are required.")
@@ -649,6 +689,9 @@ class PropertyPanel(ttk.LabelFrame):
                 wx=wx,
                 wy=wy,
                 position=position,
+                coord_system=coord_system,
+                direction=direction,
+                value=value,
             )
         )
         self.status_callback("Assign Load: click a node." if target == "Node" else "Assign Load: click a member.")
@@ -807,8 +850,10 @@ class PropertyPanel(ttk.LabelFrame):
             self.mz_var.set("0.0")
             self.wx_var.set("0.0")
             self.wy_var.set("0.0")
-            self.load_coordinate_system_var.set("Member Local Axis")
-            self.point_direction_var.set("Y")
+            self.load_coordinate_system_var.set("Local")
+            self.member_load_direction_var.set("2")
+            self.udl_magnitude_var.set("0.0")
+            self.point_direction_var.set("2")
             self.point_magnitude_var.set("0.0")
             self.position_var.set("0.5")
             self.temperature_tu_var.set("0.0")
@@ -940,9 +985,20 @@ def _member_load_summary(model, element_id: str) -> str:
             if not hasattr(load, "element") or load.element.id != element_id:
                 continue
             if load.__class__.__name__ == "UniformlyDL":
-                labels.append(f"{load_case.id}: UDL wx={load.wx:.3g}, wy={load.wy:.3g}")
+                labels.append(f"{load_case.id}: UDL {_member_load_direction_label(load)}")
             elif load.__class__.__name__ == "PointLoad":
-                labels.append(f"{load_case.id}: Point a/L={load.position:.3g}, Fx={load.fx:.3g}, Fy={load.fy:.3g}")
+                labels.append(f"{load_case.id}: Point a/L={load.position:.3g}, {_member_load_direction_label(load)}")
             elif load.__class__.__name__ == "TemperatureL":
                 labels.append(f"{load_case.id}: Temperature Tu={load.Tu:.3g}, Tb={load.Tb:.3g}")
     return "; ".join(labels) if labels else "none"
+
+
+def _member_load_direction_label(load) -> str:
+    value = getattr(load, "value", None)
+    coord_system = getattr(load, "coord_system", "local")
+    direction = getattr(load, "direction", "")
+    if value is not None and direction:
+        return f"{coord_system} {direction}={value:.3g}"
+    if load.__class__.__name__ == "UniformlyDL":
+        return f"wx={load.wx:.3g}, wy={load.wy:.3g}"
+    return f"Fx={load.fx:.3g}, Fy={load.fy:.3g}"

@@ -29,6 +29,9 @@ class LoadSettings:
     wx: float = 0.0
     wy: float = 0.0
     position: float = 0.5
+    coord_system: str = "local"
+    direction: str = ""
+    value: float | None = None
 
 
 class SupportDialog(tk.Toplevel):

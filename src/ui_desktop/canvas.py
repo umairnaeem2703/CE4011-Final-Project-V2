@@ -812,6 +812,9 @@ class ModelCanvas(ttk.Frame):
                 element_id,
                 wx=settings.wx,
                 wy=settings.wy,
+                coord_system=settings.coord_system,
+                direction=settings.direction,
+                value=settings.value,
             )
             label = "UDL"
         elif settings.load_type == "Temperature":
@@ -829,6 +832,9 @@ class ModelCanvas(ttk.Frame):
                 position=settings.position,
                 fx=settings.fx,
                 fy=settings.fy,
+                coord_system=settings.coord_system,
+                direction=settings.direction,
+                value=settings.value,
             )
             label = "point load"
         self.redraw_model()
@@ -1083,7 +1089,7 @@ class ModelCanvas(ttk.Frame):
             return
         x1, y1 = self._model_to_canvas(element.node_i.x, element.node_i.y)
         x2, y2 = self._model_to_canvas(element.node_j.x, element.node_j.y)
-        direction = _unit_vector(load.wx, -load.wy)
+        direction = _member_load_display_vector(load, x1, y1, x2, y2, load.wx, load.wy)
         if direction is None:
             return
         dx, dy = direction
@@ -1096,7 +1102,7 @@ class ModelCanvas(ttk.Frame):
             self._draw_vector_arrow(x - dx * 18, y - dy * 18, dx, dy, length=18, color="#ff7f0e")
         mid_x = (start[0] + end[0]) / 2
         mid_y = (start[1] + end[1]) / 2
-        self._draw_symbol_label(mid_x + 8, mid_y - 8, f"w=({_fmt_value(load.wx)}, {_fmt_value(load.wy)})", "#ff7f0e")
+        self._draw_symbol_label(mid_x + 8, mid_y - 8, _member_load_label("w", load, load.wx, load.wy), "#ff7f0e")
 
     def _draw_member_point_load_symbol(self, load) -> None:
         element = self.builder.model.elements.get(load.element.id)
@@ -1107,12 +1113,12 @@ class ModelCanvas(ttk.Frame):
         factor = max(0.0, min(1.0, load.position))
         x = x1 + (x2 - x1) * factor
         y = y1 + (y2 - y1) * factor
-        direction = _unit_vector(load.fx, -load.fy)
+        direction = _member_load_display_vector(load, x1, y1, x2, y2, load.fx, load.fy)
         if direction is None:
             return
         dx, dy = direction
         head_x, head_y = self._draw_vector_arrow(x - dx * 26, y - dy * 26, dx, dy, length=26, color="#d62728")
-        self._draw_symbol_label(head_x + 8, head_y - 8, f"P=({_fmt_value(load.fx)}, {_fmt_value(load.fy)})", "#d62728")
+        self._draw_symbol_label(head_x + 8, head_y - 8, _member_load_label("P", load, load.fx, load.fy), "#d62728")
 
     def _draw_member_temperature_symbol(self, load) -> None:
         element = self.builder.model.elements.get(load.element.id)
@@ -1389,6 +1395,48 @@ def _unit_vector(dx: float, dy: float) -> tuple[float, float] | None:
     if length == 0:
         return None
     return dx / length, dy / length
+
+
+def _member_load_display_vector(
+    load,
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+    component_1: float,
+    component_2: float,
+) -> tuple[float, float] | None:
+    value = getattr(load, "value", None)
+    direction = (getattr(load, "direction", "") or "").upper()
+    coord_system = (getattr(load, "coord_system", "local") or "local").lower()
+    if value is None or not direction:
+        return _unit_vector(component_1, -component_2)
+
+    sign = 1.0 if value >= 0 else -1.0
+    if coord_system == "global":
+        if direction == "X":
+            return sign, 0.0
+        if direction == "Y":
+            return 0.0, -sign
+    else:
+        axis = _unit_vector(x2 - x1, y2 - y1)
+        if axis is None:
+            return None
+        tx, ty = axis
+        if direction == "1":
+            return sign * tx, sign * ty
+        if direction == "2":
+            return sign * ty, -sign * tx
+    return _unit_vector(component_1, -component_2)
+
+
+def _member_load_label(prefix: str, load, component_1: float, component_2: float) -> str:
+    value = getattr(load, "value", None)
+    direction = getattr(load, "direction", "")
+    coord_system = getattr(load, "coord_system", "local")
+    if value is not None and direction:
+        return f"{prefix}={_fmt_value(value)} {coord_system.title()}-{direction}"
+    return f"{prefix}=({_fmt_value(component_1)}, {_fmt_value(component_2)})"
 
 
 def _offset_point(x: float, y: float, dx: float, dy: float, distance: float) -> tuple[float, float]:
