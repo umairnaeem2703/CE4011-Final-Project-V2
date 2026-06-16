@@ -3,6 +3,9 @@ import sys
 from types import SimpleNamespace
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
@@ -32,6 +35,8 @@ def _window_with_model(model=object()):
     window._write_status = window.messages.append
     window.latest_static_results = None
     window.static_analysis_error = None
+    window.latest_modal_results = None
+    window.modal_analysis_error = None
     window.result_view_category = None
     window.result_view_tree = None
     window.result_viewer_notebook = None
@@ -186,6 +191,75 @@ def test_desktop_run_static_analysis_reports_failure_without_crashing(monkeypatc
     assert window.latest_static_results is None
     assert window.static_analysis_error == "Static analysis failed: unstable"
     assert window.messages[-1] == "Static analysis failed: unstable"
+
+
+def test_desktop_run_modal_analysis_stores_result_and_status(monkeypatch):
+    expected_results = SimpleNamespace(num_modes_extracted=2)
+    validator_calls = []
+    modal_calls = []
+
+    monkeypatch.setattr(
+        main_window,
+        "StructuralValidator",
+        lambda model: SimpleNamespace(validate=lambda: validator_calls.append(model)),
+    )
+    monkeypatch.setattr(
+        main_window,
+        "run_modal_analysis",
+        lambda model: modal_calls.append(model) or SimpleNamespace(ok=True, results=expected_results, error=None),
+    )
+    window = _window_with_model()
+
+    window._toolbar_action("Run Modal Analysis")
+
+    assert validator_calls == [window.model_canvas.builder.model]
+    assert modal_calls == [window.model_canvas.builder.model]
+    assert window.latest_modal_results is expected_results
+    assert window.modal_analysis_error is None
+    assert window.messages[-1] == "Modal analysis complete: 2 mode(s) extracted."
+
+
+def test_desktop_run_modal_analysis_reports_mass_message(monkeypatch):
+    monkeypatch.setattr(
+        main_window,
+        "StructuralValidator",
+        lambda model: SimpleNamespace(validate=lambda: None),
+    )
+    monkeypatch.setattr(
+        main_window,
+        "run_modal_analysis",
+        lambda model: SimpleNamespace(ok=False, results=None, error="Add mass before running modal analysis."),
+    )
+    window = _window_with_model()
+    window.latest_modal_results = object()
+
+    window._toolbar_action("Run Modal Analysis")
+
+    assert window.latest_modal_results is None
+    assert window.modal_analysis_error == "Assign masses before running Modal Analysis."
+    assert window.messages[-1] == "Assign masses before running Modal Analysis."
+
+
+def test_desktop_run_modal_analysis_stops_on_validation_error(monkeypatch):
+    modal_calls = []
+    monkeypatch.setattr(
+        main_window,
+        "StructuralValidator",
+        lambda model: SimpleNamespace(validate=lambda: (_ for _ in ()).throw(ValueError("model is invalid"))),
+    )
+    monkeypatch.setattr(
+        main_window,
+        "run_modal_analysis",
+        lambda model: modal_calls.append(model) or SimpleNamespace(ok=True, results=object(), error=None),
+    )
+    window = _window_with_model()
+
+    window._toolbar_action("Run Modal Analysis")
+
+    assert modal_calls == []
+    assert window.latest_modal_results is None
+    assert window.modal_analysis_error == "model is invalid"
+    assert window.messages[-1] == "model is invalid"
 
 
 def test_desktop_static_result_tables_use_cached_result_fields():
@@ -828,6 +902,8 @@ def test_desktop_open_xml_replaces_builder_refreshes_ui_and_clears_results(tmp_p
 
     window.latest_static_results = object()
     window.static_analysis_error = "old error"
+    window.latest_modal_results = object()
+    window.modal_analysis_error = "old modal error"
     window.result_view_category = "Nodal Displacements"
     window.result_view_tree = object()
 
@@ -836,6 +912,8 @@ def test_desktop_open_xml_replaces_builder_refreshes_ui_and_clears_results(tmp_p
     assert window.model_canvas.builder.model.name == "Imported Desktop Model"
     assert window.latest_static_results is None
     assert window.static_analysis_error is None
+    assert window.latest_modal_results is None
+    assert window.modal_analysis_error is None
     assert window.result_view_category is None
     assert window.result_view_tree is None
     assert ("refresh_object_tree", None) in events

@@ -13,6 +13,7 @@ try:
     from model_builder import ModelBuilder
     from parser import XMLParser
     from structural_validator import StructuralValidator
+    from ui.dynamic_analysis import run_modal_analysis
     from ui.static_analysis import run_static_analysis
     from visualizer import build_member_review_profile, plot_static_deformed_shape, plot_static_nvm_diagram
 except ImportError:  # pragma: no cover - used when launched as python -m src.ui_desktop.app
@@ -20,6 +21,7 @@ except ImportError:  # pragma: no cover - used when launched as python -m src.ui
     from ..model_builder import ModelBuilder
     from ..parser import XMLParser
     from ..structural_validator import StructuralValidator
+    from ..ui.dynamic_analysis import run_modal_analysis
     from ..ui.static_analysis import run_static_analysis
     from ..visualizer import build_member_review_profile, plot_static_deformed_shape, plot_static_nvm_diagram
 
@@ -89,7 +91,7 @@ COMMAND_TABS = (
             ("view_action", "Full View"),
         ),
     ),
-    ("Analyze", (("action", "Run Static Analysis"),)),
+    ("Analyze", (("action", "Run Static Analysis"), ("action", "Run Modal Analysis"))),
     ("Results", (("action", "Results"),)),
 )
 
@@ -111,6 +113,8 @@ class MainWindow:
         self.status_message = tk.StringVar(value="Select / Inspect: click a node or member to inspect it.")
         self.latest_static_results = None
         self.static_analysis_error = None
+        self.latest_modal_results = None
+        self.modal_analysis_error = None
         self.result_view_category = None
         self.result_view_tree = None
         self.result_viewer_window = None
@@ -323,6 +327,9 @@ class MainWindow:
         if name == "Run Static Analysis":
             self._run_static_analysis()
             return
+        if name == "Run Modal Analysis":
+            self._run_modal_analysis()
+            return
         if name == "Results":
             self._show_static_results()
             return
@@ -345,6 +352,44 @@ class MainWindow:
             f"Static analysis complete for {load_case}: "
             f"{displacement_count} displacement rows, {reaction_count} reaction rows."
         )
+
+    def _run_modal_analysis(self) -> None:
+        validation_error = self._validate_current_model(show_dialog=False)
+        if validation_error is not None:
+            self.latest_modal_results = None
+            self.modal_analysis_error = validation_error
+            return
+
+        result = run_modal_analysis(self.model_canvas.builder.model)
+        if not result.ok:
+            message = self._modal_error_message(result.error)
+            self.latest_modal_results = None
+            self.modal_analysis_error = message
+            self._write_status(message)
+            return
+
+        self.latest_modal_results = result.results
+        self.modal_analysis_error = None
+        mode_count = getattr(result.results, "num_modes_extracted", None)
+        if mode_count is None:
+            modes = getattr(result.results, "mode_shapes", None) or getattr(result.results, "frequencies", None)
+            mode_count = len(modes) if modes is not None else None
+        if mode_count is None:
+            self._write_status("Modal analysis complete.")
+        else:
+            self._write_status(f"Modal analysis complete: {mode_count} mode(s) extracted.")
+
+    def _modal_error_message(self, error: str | None) -> str:
+        if not error:
+            return "Modal analysis failed."
+        normalized = error.lower()
+        if (
+            "add mass" in normalized
+            or "positive-mass dynamic dofs" in normalized
+            or "active dynamic dofs" in normalized
+        ):
+            return "Assign masses before running Modal Analysis."
+        return error
 
     def _show_static_results(self) -> None:
         window = self._create_static_results_window()
@@ -1534,6 +1579,8 @@ class MainWindow:
     def _reset_analysis_state(self) -> None:
         self.latest_static_results = None
         self.static_analysis_error = None
+        self.latest_modal_results = None
+        self.modal_analysis_error = None
         self.result_view_category = None
         self.result_view_tree = None
         self.selected_member_id = None
@@ -1556,19 +1603,25 @@ class MainWindow:
         self._write_status(f"Saved XML: {path}")
 
     def _validate_model(self) -> None:
+        if self._validate_current_model(show_dialog=True) is None:
+            self._write_status("Model validation passed.")
+
+    def _validate_current_model(self, *, show_dialog: bool) -> str | None:
         try:
             StructuralValidator(self.model_canvas.builder.model).validate()
         except UnstableStructureError as exc:
             message = str(exc) or "Model validation failed."
-            messagebox.showerror("Model Validation Failed", message, parent=self.root)
+            if show_dialog:
+                messagebox.showerror("Model Validation Failed", message, parent=self.root)
             self._write_status(message)
-            return
+            return message
         except Exception as exc:
             message = str(exc) or "Model validation failed."
-            messagebox.showerror("Model Validation Failed", message, parent=self.root)
+            if show_dialog:
+                messagebox.showerror("Model Validation Failed", message, parent=self.root)
             self._write_status(message)
-            return
-        self._write_status("Model validation passed.")
+            return message
+        return None
 
     def _show_selection(self, kind: str | None, obj: object | None) -> None:
         self.property_panel.show_selection(kind, obj)

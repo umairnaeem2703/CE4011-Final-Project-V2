@@ -28,7 +28,7 @@ Architecture/UI cleanup is complete enough to proceed. Rigid-link behavior is cl
 
 ## Current State
 
-5D0, 5D1, 5D2, 5D2B, 5D3A, 5D3B, 5D3C, 5D3D, 5D3E, and 5D3F are complete. The Static Results workflow is stable after audit, including no-result guards, table/viewer launch paths, member-viewer cached refresh, and cursor-only slider updates. The next implementation task is 5D4 Modal.
+5D0, 5D1, 5D2, 5D2B, 5D3A, 5D3B, 5D3C, 5D3D, 5D3E, 5D3F, and 5D4A are complete. The desktop UI can now run Modal analysis for the current model, validate before launch, cache the latest Modal result, and report no-mass or failure status without ground-motion input. The next implementation task is Modal results/mode-shape display.
 
 ## Task Status
 
@@ -44,6 +44,7 @@ Architecture/UI cleanup is complete enough to proceed. Rigid-link behavior is cl
 | 5D3D Member end forces + member N/V/M    | DONE   | Added selected-member end forces and filtered member N/V/M diagram rendering in the member-review tab. |
 | 5D3E Member displacement diagram + location/scroll/max values | DONE   | Added the integrated member review cursor, displacement strip, and current/max value summaries. |
 | 5D3F Static Results workflow stabilization audit | DONE   | Audited the Static Results workflow and confirmed stable no-result, table, complete-model viewer, and member-viewer behavior. |
+| 5D4A Modal run from desktop UI           | DONE   | Desktop UI can run Modal analysis from the current model, validate first, store the result, and show success/error status. |
 | 5D4 Modal run + mode shape/results       | TODO   |                                                                                                                         |
 | 5D5 RSA run + results                   | TODO   |                                                                                                                         |
 | 5D6 THA run + histories                 | TODO   |                                                                                                                         |
