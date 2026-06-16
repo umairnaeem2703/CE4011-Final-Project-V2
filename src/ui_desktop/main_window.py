@@ -252,6 +252,16 @@ class MainWindow:
 
     def _show_selection(self, kind: str | None, obj: object | None) -> None:
         self.property_panel.show_selection(kind, obj)
+        if not hasattr(self, "object_tree"):
+            return
+        if kind == "node" and obj is not None:
+            self.object_tree.select_objects(("node", obj.id))
+        elif kind == "element" and obj is not None:
+            self.object_tree.select_objects(("element", obj.id))
+        elif kind == "multi" and obj is not None:
+            self.object_tree.select_objects(obj)
+        elif kind is None:
+            self.object_tree.select_objects(None)
 
     def _select_from_tree(self, kind: str, object_id: str) -> None:
         if kind == "node":

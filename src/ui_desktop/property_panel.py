@@ -186,6 +186,15 @@ class PropertyPanel(ttk.LabelFrame):
                 ("Section", _section_summary(element.section)),
                 ("Loads", loads_text),
             ]
+        elif self.selected_kind == "multi" and self.selected_object is not None:
+            count = self.selected_object.get("count", 0)
+            node_count = len(self.selected_object.get("nodes", []))
+            element_count = len(self.selected_object.get("elements", []))
+            rows = [
+                ("Selection", f"{count} objects selected"),
+                ("Nodes", node_count),
+                ("Members", element_count),
+            ]
         else:
             rows = [("Selection", "Click a node or member.")]
 

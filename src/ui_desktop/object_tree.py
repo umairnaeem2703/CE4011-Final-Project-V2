@@ -18,13 +18,14 @@ class ObjectTreePanel(ttk.LabelFrame):
     def __init__(self, parent, *, selection_callback: SelectionCallback | None = None) -> None:
         super().__init__(parent, text="Objects", padding=6)
         self.selection_callback = selection_callback or (lambda kind, object_id: None)
-        self.tree = ttk.Treeview(self, show="tree", height=10)
+        self.tree = ttk.Treeview(self, show="tree", height=10, selectmode="extended")
         self.tree.grid(row=0, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.tree.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=scrollbar.set)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
+        self._suppress_select_callback = False
         self.tree.bind("<<TreeviewSelect>>", self._handle_select)
 
     def refresh(self, model) -> None:
@@ -99,6 +100,8 @@ class ObjectTreePanel(ttk.LabelFrame):
             )
 
     def _handle_select(self, _event) -> None:
+        if self._suppress_select_callback:
+            return
         selected = self.tree.selection()
         if not selected:
             return
@@ -107,6 +110,39 @@ class ObjectTreePanel(ttk.LabelFrame):
             return
         kind, object_id = item_id.split(":", 1)
         self.selection_callback(kind, object_id)
+
+    def select_objects(self, selection) -> None:
+        self._suppress_select_callback = True
+        try:
+            if selection is None:
+                self.tree.selection_remove(self.tree.selection())
+                return
+            if isinstance(selection, tuple):
+                kind, object_id = selection
+                item_id = f"{kind}:{object_id}"
+                if self.tree.exists(item_id):
+                    self.tree.selection_set(item_id)
+                    self.tree.see(item_id)
+                else:
+                    self.tree.selection_remove(self.tree.selection())
+                return
+            item_ids = []
+            for node_id in selection.get("nodes", []):
+                item_id = f"node:{node_id}"
+                if self.tree.exists(item_id):
+                    item_ids.append(item_id)
+            for element_id in selection.get("elements", []):
+                item_id = f"element:{element_id}"
+                if self.tree.exists(item_id):
+                    item_ids.append(item_id)
+            self.tree.selection_set(tuple(item_ids))
+            if item_ids:
+                self.tree.see(item_ids[0])
+        finally:
+            self.after_idle(self._allow_selection_callback)
+
+    def _allow_selection_callback(self) -> None:
+        self._suppress_select_callback = False
 
 
 def _mass_summary(mass) -> str:

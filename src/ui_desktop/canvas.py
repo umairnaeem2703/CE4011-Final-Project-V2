@@ -75,11 +75,16 @@ class ModelCanvas(ttk.Frame):
         self.node_radius = 5
         self._view_initialized = False
         self._pan_last: tuple[int, int] | None = None
+        self._window_start: tuple[int, int] | None = None
+        self._window_rect_id: int | None = None
+        self._window_dragging = False
         self.next_node_id = 1
         self.next_element_number = 1
         self.pending_start_node_id: int | None = None
         self.selected_kind: str | None = None
         self.selected_id: int | str | None = None
+        self.selected_node_ids: set[int] = set()
+        self.selected_element_ids: set[str] = set()
 
         self.item_to_node_id: dict[int, int] = {}
         self.node_id_to_item: dict[int, int] = {}
@@ -145,6 +150,8 @@ class ModelCanvas(ttk.Frame):
         self.active_command = command
         if command != "Pan":
             self._pan_last = None
+        if command != "Select / Inspect":
+            self._clear_window_selection_preview()
         if command != "Draw Member":
             self.pending_start_node_id = None
         self.status_callback(self.command_instruction())
@@ -267,18 +274,25 @@ class ModelCanvas(ttk.Frame):
     def select_node(self, node_id: int) -> None:
         self.selected_kind = "node"
         self.selected_id = node_id
+        self.selected_node_ids = {node_id}
+        self.selected_element_ids.clear()
         self._apply_selection_highlight()
         self.selection_callback("node", self.builder.model.nodes.get(node_id))
 
     def select_element(self, element_id: str) -> None:
         self.selected_kind = "element"
         self.selected_id = element_id
+        self.selected_node_ids.clear()
+        self.selected_element_ids = {element_id}
         self._apply_selection_highlight()
         self.selection_callback("element", self.builder.model.elements.get(element_id))
 
     def clear_selection(self, *, notify: bool = True) -> None:
         self.selected_kind = None
         self.selected_id = None
+        self.selected_node_ids.clear()
+        self.selected_element_ids.clear()
+        self._apply_selection_highlight()
         if notify:
             self.selection_callback(None, None)
 
@@ -295,8 +309,17 @@ class ModelCanvas(ttk.Frame):
     def _handle_button_press(self, event) -> None:
         if self.active_command == "Pan":
             self._pan_last = (event.x, event.y)
+        elif self.active_command == "Select / Inspect" and not self._event_has_ctrl(event):
+            node_id = self._find_node_near_canvas_point(event.x, event.y)
+            element_id = self._find_element_near_canvas_point(event.x, event.y) if node_id is None else None
+            if node_id is None and element_id is None:
+                self._window_start = (event.x, event.y)
+                self._window_dragging = False
 
     def _handle_drag(self, event) -> None:
+        if self.active_command == "Select / Inspect" and self._window_start is not None:
+            self._update_window_selection_preview(event.x, event.y)
+            return
         if self.active_command != "Pan" or self._pan_last is None:
             return
         last_x, last_y = self._pan_last
@@ -305,7 +328,9 @@ class ModelCanvas(ttk.Frame):
         self._pan_last = (event.x, event.y)
         self.redraw_model()
 
-    def _handle_button_release(self, _event) -> None:
+    def _handle_button_release(self, event) -> None:
+        if self.active_command == "Select / Inspect" and self._window_start is not None:
+            self._finish_window_selection(event.x, event.y)
         self._pan_last = None
 
     def _handle_click(self, event) -> None:
@@ -351,11 +376,17 @@ class ModelCanvas(ttk.Frame):
                 return
             self.collect_diaphragm_node(node_id)
         elif node_id is not None:
-            self.select_node(node_id)
-            self.status_callback(f"Selected node {node_id}.")
+            if self._event_has_ctrl(event):
+                self._toggle_node_selection(node_id)
+            else:
+                self.select_node(node_id)
+                self.status_callback(f"Selected node {node_id}.")
         elif element_id is not None:
-            self.select_element(element_id)
-            self.status_callback(f"Selected member {element_id}.")
+            if self._event_has_ctrl(event):
+                self._toggle_element_selection(element_id)
+            else:
+                self.select_element(element_id)
+                self.status_callback(f"Selected member {element_id}.")
         else:
             self.clear_selection()
             self.status_callback(self.command_instruction())
@@ -396,6 +427,19 @@ class ModelCanvas(ttk.Frame):
         return element_id
 
     def _delete_target(self, node_id: int | None, element_id: str | None) -> None:
+        selection_count = self._selection_count()
+        if selection_count > 0 and (
+            (node_id is None and element_id is None)
+            or (
+                selection_count > 1
+                and (
+                    (node_id is not None and node_id in self.selected_node_ids)
+                    or (element_id is not None and element_id in self.selected_element_ids)
+                )
+            )
+        ):
+            self._delete_selected_targets()
+            return
         if element_id is not None:
             self.builder.model.elements.pop(element_id, None)
             self.clear_selection()
@@ -427,6 +471,183 @@ class ModelCanvas(ttk.Frame):
             self.status_callback(f"Deleted node {node_id}.")
             return
         self.status_callback("Delete: click a node or member to remove it.")
+
+    def _delete_selected_targets(self) -> None:
+        deleted_members = 0
+        blocked_nodes = []
+        for element_id in sorted(self.selected_element_ids):
+            if self.builder.model.elements.pop(element_id, None) is not None:
+                deleted_members += 1
+
+        deleted_nodes = 0
+        for node_id in sorted(self.selected_node_ids):
+            connected = [
+                element_id
+                for element_id, element in self.builder.model.elements.items()
+                if element.node_i.id == node_id or element.node_j.id == node_id
+            ]
+            if connected:
+                blocked_nodes.append(node_id)
+                continue
+            if self.builder.model.nodes.pop(node_id, None) is None:
+                continue
+            self.builder.model.supports.pop(node_id, None)
+            self.builder.model.lumped_masses.pop(node_id, None)
+            for diaphragm_id, node_ids in list(self.builder.model.diaphragm_ux_groups.items()):
+                self.builder.model.diaphragm_ux_groups[diaphragm_id] = [
+                    existing_id for existing_id in node_ids if existing_id != node_id
+                ]
+                if not self.builder.model.diaphragm_ux_groups[diaphragm_id]:
+                    self.builder.model.diaphragm_ux_groups.pop(diaphragm_id, None)
+            deleted_nodes += 1
+
+        self.clear_selection()
+        self.redraw_model()
+        self.change_callback()
+        parts = []
+        if deleted_nodes:
+            parts.append(f"deleted {deleted_nodes} node(s)")
+        if deleted_members:
+            parts.append(f"deleted {deleted_members} member(s)")
+        if blocked_nodes:
+            parts.append(f"blocked node(s): {', '.join(str(node_id) for node_id in blocked_nodes)}")
+        self.status_callback("Delete selection: " + "; ".join(parts) if parts else "Delete selection: nothing deleted.")
+
+    def _toggle_node_selection(self, node_id: int) -> None:
+        if node_id in self.selected_node_ids:
+            self.selected_node_ids.remove(node_id)
+        else:
+            self.selected_node_ids.add(node_id)
+        self._notify_current_selection()
+
+    def _toggle_element_selection(self, element_id: str) -> None:
+        if element_id in self.selected_element_ids:
+            self.selected_element_ids.remove(element_id)
+        else:
+            self.selected_element_ids.add(element_id)
+        self._notify_current_selection()
+
+    def _set_multi_selection(self, node_ids: set[int], element_ids: set[str]) -> None:
+        self.selected_node_ids = {node_id for node_id in node_ids if node_id in self.builder.model.nodes}
+        self.selected_element_ids = {
+            element_id for element_id in element_ids if element_id in self.builder.model.elements
+        }
+        self._notify_current_selection()
+
+    def _notify_current_selection(self) -> None:
+        count = self._selection_count()
+        if count == 0:
+            self.selected_kind = None
+            self.selected_id = None
+            self._apply_selection_highlight()
+            self.selection_callback(None, None)
+            self.status_callback("Selection cleared.")
+            return
+        if count == 1 and self.selected_node_ids:
+            node_id = next(iter(self.selected_node_ids))
+            self.selected_kind = "node"
+            self.selected_id = node_id
+            self._apply_selection_highlight()
+            self.selection_callback("node", self.builder.model.nodes.get(node_id))
+            self.status_callback(f"Selected node {node_id}.")
+            return
+        if count == 1 and self.selected_element_ids:
+            element_id = next(iter(self.selected_element_ids))
+            self.selected_kind = "element"
+            self.selected_id = element_id
+            self._apply_selection_highlight()
+            self.selection_callback("element", self.builder.model.elements.get(element_id))
+            self.status_callback(f"Selected member {element_id}.")
+            return
+
+        self.selected_kind = "multi"
+        self.selected_id = None
+        self._apply_selection_highlight()
+        selection = {
+            "nodes": sorted(self.selected_node_ids),
+            "elements": sorted(self.selected_element_ids),
+            "count": count,
+        }
+        self.selection_callback("multi", selection)
+        self.status_callback(f"Selected {count} objects.")
+
+    def _selection_count(self) -> int:
+        return len(self.selected_node_ids) + len(self.selected_element_ids)
+
+    def _event_has_ctrl(self, event) -> bool:
+        return bool(getattr(event, "state", 0) & 0x0004)
+
+    def _clear_window_selection_preview(self) -> None:
+        if self._window_rect_id is not None:
+            self.canvas.delete(self._window_rect_id)
+        self._window_rect_id = None
+        self._window_start = None
+        self._window_dragging = False
+
+    def _update_window_selection_preview(self, x: int, y: int) -> None:
+        if self._window_start is None:
+            return
+        start_x, start_y = self._window_start
+        if abs(x - start_x) < 4 and abs(y - start_y) < 4:
+            return
+        self._window_dragging = True
+        if self._window_rect_id is None:
+            self._window_rect_id = self.canvas.create_rectangle(
+                start_x,
+                start_y,
+                x,
+                y,
+                outline="#0b65c2",
+                dash=(4, 2),
+                width=1,
+                tags="selection-window",
+            )
+        else:
+            self.canvas.coords(self._window_rect_id, start_x, start_y, x, y)
+
+    def _finish_window_selection(self, x: int, y: int) -> None:
+        if self._window_start is None:
+            return
+        start_x, start_y = self._window_start
+        dragging = self._window_dragging
+        self._clear_window_selection_preview()
+        if not dragging:
+            return
+        left_to_right = x >= start_x
+        x1, x2 = sorted((start_x, x))
+        y1, y2 = sorted((start_y, y))
+        self._set_multi_selection(
+            self._nodes_in_window(x1, y1, x2, y2),
+            self._elements_in_window(x1, y1, x2, y2, fully_inside=left_to_right),
+        )
+
+    def _nodes_in_window(self, x1: float, y1: float, x2: float, y2: float) -> set[int]:
+        selected = set()
+        for node_id, node in self.builder.model.nodes.items():
+            cx, cy = self._model_to_canvas(node.x, node.y)
+            if x1 <= cx <= x2 and y1 <= cy <= y2:
+                selected.add(node_id)
+        return selected
+
+    def _elements_in_window(
+        self,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        *,
+        fully_inside: bool,
+    ) -> set[str]:
+        selected = set()
+        for element_id, element in self.builder.model.elements.items():
+            ax, ay = self._model_to_canvas(element.node_i.x, element.node_i.y)
+            bx, by = self._model_to_canvas(element.node_j.x, element.node_j.y)
+            if fully_inside:
+                if _point_in_rect(ax, ay, x1, y1, x2, y2) and _point_in_rect(bx, by, x1, y1, x2, y2):
+                    selected.add(element_id)
+            elif _segment_intersects_rect(ax, ay, bx, by, x1, y1, x2, y2):
+                selected.add(element_id)
+        return selected
 
     def assign_support_to_node(self, node_id: int) -> None:
         if node_id not in self.builder.model.nodes:
@@ -940,10 +1161,12 @@ class ModelCanvas(ttk.Frame):
         for item_id in self.element_id_to_item.values():
             self.canvas.itemconfigure(item_id, width=3)
 
-        if self.selected_kind == "node" and self.selected_id in self.node_id_to_item:
-            self.canvas.itemconfigure(self.node_id_to_item[int(self.selected_id)], outline="#ffbf00", width=3)
-        elif self.selected_kind == "element" and self.selected_id in self.element_id_to_item:
-            self.canvas.itemconfigure(self.element_id_to_item[str(self.selected_id)], width=6)
+        for node_id in self.selected_node_ids:
+            if node_id in self.node_id_to_item:
+                self.canvas.itemconfigure(self.node_id_to_item[node_id], outline="#ffbf00", width=3)
+        for element_id in self.selected_element_ids:
+            if element_id in self.element_id_to_item:
+                self.canvas.itemconfigure(self.element_id_to_item[element_id], width=6)
 
     def _find_node_near_canvas_point(self, canvas_x: float, canvas_y: float) -> int | None:
         for node_id, item_id in self.node_id_to_item.items():
@@ -1015,6 +1238,66 @@ def _point_segment_distance(px: float, py: float, x1: float, y1: float, x2: floa
     closest_x = x1 + t * dx
     closest_y = y1 + t * dy
     return math.hypot(px - closest_x, py - closest_y)
+
+
+def _point_in_rect(px: float, py: float, x1: float, y1: float, x2: float, y2: float) -> bool:
+    return x1 <= px <= x2 and y1 <= py <= y2
+
+
+def _segment_intersects_rect(
+    ax: float,
+    ay: float,
+    bx: float,
+    by: float,
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+) -> bool:
+    if _point_in_rect(ax, ay, x1, y1, x2, y2) or _point_in_rect(bx, by, x1, y1, x2, y2):
+        return True
+    return any(
+        _segments_intersect(ax, ay, bx, by, rx1, ry1, rx2, ry2)
+        for rx1, ry1, rx2, ry2 in (
+            (x1, y1, x2, y1),
+            (x2, y1, x2, y2),
+            (x2, y2, x1, y2),
+            (x1, y2, x1, y1),
+        )
+    )
+
+
+def _segments_intersect(
+    ax: float,
+    ay: float,
+    bx: float,
+    by: float,
+    cx: float,
+    cy: float,
+    dx: float,
+    dy: float,
+) -> bool:
+    def orientation(px, py, qx, qy, rx, ry):
+        value = (qy - py) * (rx - qx) - (qx - px) * (ry - qy)
+        if abs(value) < 1e-9:
+            return 0
+        return 1 if value > 0 else 2
+
+    def on_segment(px, py, qx, qy, rx, ry):
+        return min(px, rx) - 1e-9 <= qx <= max(px, rx) + 1e-9 and min(py, ry) - 1e-9 <= qy <= max(py, ry) + 1e-9
+
+    o1 = orientation(ax, ay, bx, by, cx, cy)
+    o2 = orientation(ax, ay, bx, by, dx, dy)
+    o3 = orientation(cx, cy, dx, dy, ax, ay)
+    o4 = orientation(cx, cy, dx, dy, bx, by)
+    if o1 != o2 and o3 != o4:
+        return True
+    return (
+        (o1 == 0 and on_segment(ax, ay, cx, cy, bx, by))
+        or (o2 == 0 and on_segment(ax, ay, dx, dy, bx, by))
+        or (o3 == 0 and on_segment(cx, cy, ax, ay, dx, dy))
+        or (o4 == 0 and on_segment(cx, cy, bx, by, dx, dy))
+    )
 
 
 def _unit_vector(dx: float, dy: float) -> tuple[float, float] | None:
