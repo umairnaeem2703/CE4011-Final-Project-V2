@@ -12,10 +12,11 @@ from .dialogs import LoadSettings, SupportSettings
 class PropertyPanel(ttk.LabelFrame):
     """Right-side context panel for commands and selection inspection."""
 
-    def __init__(self, parent, model_canvas: ModelCanvas, *, status_callback=None) -> None:
+    def __init__(self, parent, model_canvas: ModelCanvas, *, status_callback=None, command_callback=None) -> None:
         super().__init__(parent, text="Properties / Settings", padding=8)
         self.model_canvas = model_canvas
         self.status_callback = status_callback or (lambda message: None)
+        self.command_callback = command_callback
         self.current_command = "Select / Inspect"
         self.selected_kind = None
         self.selected_object = None
@@ -32,6 +33,8 @@ class PropertyPanel(ttk.LabelFrame):
         self.member_type_var = tk.StringVar(value="frame")
         self.selected_node_x_var = tk.StringVar(value="")
         self.selected_node_y_var = tk.StringVar(value="")
+        self.new_node_hinge_var = tk.BooleanVar(value=False)
+        self.selected_node_hinge_var = tk.BooleanVar(value=False)
         self.material_id_var = tk.StringVar(value="M1")
         self.material_type_var = tk.StringVar(value="Generic")
         self.material_e_var = tk.StringVar(value="1.0")
@@ -77,6 +80,9 @@ class PropertyPanel(ttk.LabelFrame):
         self.diaphragm_action_var = tk.StringVar(value="Replace")
         self.diaphragm_id_var = tk.StringVar(value="D1")
         self.diaphragm_nodes_var = tk.StringVar(value="")
+        self.replicate_copies_var = tk.StringVar(value="1")
+        self.replicate_dx_var = tk.StringVar(value="0.0")
+        self.replicate_dy_var = tk.StringVar(value="0.0")
         self._section_geometric_widgets = []
         self._section_direct_widgets = []
 
@@ -103,15 +109,17 @@ class PropertyPanel(ttk.LabelFrame):
         elif command == "Assign Diaphragm":
             self._diaphragm_panel()
         elif command == "Delete":
-            self._placeholder_panel("Delete", "Click a node or member on the canvas to delete it.")
+            self._delete_panel()
+        elif command == "Replicate":
+            self._replicate_panel()
         else:
             self._placeholder_panel(command, "No settings for this command yet.")
 
     def show_selection(self, kind: str | None, obj: object | None) -> None:
         self.selected_kind = kind
         self.selected_object = obj
-        if self.current_command == "Select / Inspect":
-            self.show_command("Select / Inspect")
+        if self.current_command in ("Select / Inspect", "Draw Node", "Replicate"):
+            self.show_command(self.current_command)
         elif self.current_command == "Assign Diaphragm":
             self.show_command("Assign Diaphragm")
 
@@ -138,9 +146,33 @@ class PropertyPanel(ttk.LabelFrame):
         ttk.Entry(form, textvariable=self.x_var, width=12).grid(row=0, column=1, sticky="ew", pady=2)
         ttk.Label(form, text="y").grid(row=1, column=0, sticky="w", pady=2)
         ttk.Entry(form, textvariable=self.y_var, width=12).grid(row=1, column=1, sticky="ew", pady=2)
+        ttk.Checkbutton(
+            form,
+            text="New nodes are hinged",
+            variable=self.new_node_hinge_var,
+            command=self._sync_draw_node_hinge,
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 2))
         ttk.Button(self, text="Add Node", command=self._add_node).grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        if self.selected_kind == "node" and self.selected_object is not None:
+            node = self.selected_object
+            self.selected_node_hinge_var.set(bool(getattr(node, "is_hinged", False)))
+            self._sync_draw_node_hinge()
+            editor = ttk.LabelFrame(self, text="Selected Node", padding=6)
+            editor.grid(row=3, column=0, sticky="ew", pady=(8, 0))
+            editor.columnconfigure(1, weight=1)
+            ttk.Label(editor, text=f"Node {node.id}").grid(row=0, column=0, columnspan=2, sticky="w", pady=2)
+            ttk.Checkbutton(
+                editor,
+                text="Hinged node (release frame end moments)",
+                variable=self.selected_node_hinge_var,
+                command=self._apply_node_hinge_from_draw_node,
+            ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 2))
+            reset_row = 4
+        else:
+            self._sync_draw_node_hinge()
+            reset_row = 3
         ttk.Button(self, text="Reset to Default", command=self._reset_current_command).grid(
-            row=3,
+            row=reset_row,
             column=0,
             sticky="ew",
             pady=(6, 0),
@@ -181,6 +213,7 @@ class PropertyPanel(ttk.LabelFrame):
             loads_text = _node_load_summary(self.model_canvas.builder.model, node.id)
             rows = [
                 ("Node id", node.id),
+                ("Hinge", "Yes" if getattr(node, "is_hinged", False) else "No"),
                 ("Support", support_text),
                 ("Mass", mass_text),
                 ("Diaphragm", _node_diaphragm_summary(self.model_canvas.builder.model, node.id)),
@@ -232,6 +265,43 @@ class PropertyPanel(ttk.LabelFrame):
             column=0,
             sticky="ew",
             pady=(8, 0),
+        )
+
+    def _delete_panel(self) -> None:
+        self._title("Delete")
+        ttk.Label(
+            self,
+            text="Click a node or member on the canvas to delete it.",
+            wraplength=220,
+        ).grid(row=1, column=0, sticky="nw", pady=(8, 0))
+
+    def _replicate_panel(self) -> None:
+        self._title("Replicate")
+        form = ttk.Frame(self)
+        form.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        form.columnconfigure(1, weight=1)
+        ttk.Label(form, text="Copies").grid(row=0, column=0, sticky="w", pady=2)
+        ttk.Entry(form, textvariable=self.replicate_copies_var, width=10).grid(row=0, column=1, sticky="ew", pady=2)
+        ttk.Label(form, text="dx").grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Entry(form, textvariable=self.replicate_dx_var, width=10).grid(row=1, column=1, sticky="ew", pady=2)
+        ttk.Label(form, text="dy").grid(row=2, column=0, sticky="w", pady=2)
+        ttk.Entry(form, textvariable=self.replicate_dy_var, width=10).grid(row=2, column=1, sticky="ew", pady=2)
+        ttk.Label(
+            self,
+            text=f"{self.model_canvas.selection_count()} selected object(s).",
+            wraplength=220,
+        ).grid(row=2, column=0, sticky="nw", pady=(8, 0))
+        ttk.Button(self, text="Apply Replicate", command=self._apply_replicate).grid(
+            row=3,
+            column=0,
+            sticky="ew",
+            pady=(8, 0),
+        )
+        ttk.Button(self, text="Cancel", command=self._cancel_replicate).grid(
+            row=4,
+            column=0,
+            sticky="ew",
+            pady=(6, 0),
         )
 
     def _materials_sections_panel(self) -> None:
@@ -500,8 +570,21 @@ class PropertyPanel(ttk.LabelFrame):
         self._combo(editor, 0, "Type", self.member_type_var, ("frame", "truss"), lambda: None)
         self._combo(editor, 1, "Material", self.member_material_var, materials, lambda: None)
         self._combo(editor, 2, "Section", self.member_section_var, sections, lambda: None)
+        rigid_link_value = "Yes" if getattr(self.selected_object, "is_axially_rigid", False) else "No"
+        ttk.Label(editor, text="Rigid link (couple UX, UY, RZ)").grid(row=3, column=0, sticky="w", pady=(8, 2))
+        ttk.Label(editor, text=rigid_link_value).grid(row=3, column=1, sticky="w", pady=(8, 2))
+        ttk.Label(
+            editor,
+            text="Uses existing is_axially_rigid XML flag; this is not axial-only stiffness.",
+            wraplength=210,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=2)
+        ttk.Label(
+            editor,
+            text="Flexurally rigid beam idealization is not implemented yet. Use direct EI as a stiffness approximation only.",
+            wraplength=210,
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=2)
         ttk.Button(editor, text="Apply Member Properties", command=self._apply_member_properties).grid(
-            row=3,
+            row=6,
             column=0,
             columnspan=2,
             sticky="ew",
@@ -550,7 +633,7 @@ class PropertyPanel(ttk.LabelFrame):
         except ValueError:
             self.status_callback("Draw Node: enter numeric x and y values.")
             return
-        self.model_canvas.add_node_by_coordinates(x, y)
+        self.model_canvas.add_node_by_coordinates(x, y, is_hinged=self.new_node_hinge_var.get())
 
     def _draw_member(self) -> None:
         try:
@@ -793,6 +876,38 @@ class PropertyPanel(ttk.LabelFrame):
             self.selected_object = updated
             self.show_command("Select / Inspect")
 
+    def _apply_node_hinge_from_draw_node(self) -> None:
+        if self.selected_kind != "node" or self.selected_object is None:
+            self.status_callback("Node Hinge: select one node first.")
+            return
+        updated = self.model_canvas.update_selected_node_hinge(self.selected_node_hinge_var.get())
+        if updated is not None:
+            self.selected_object = updated
+            self.show_command("Draw Node")
+
+    def _sync_draw_node_hinge(self) -> None:
+        self.model_canvas.set_active_node_hinge(self.new_node_hinge_var.get())
+
+    def _apply_replicate(self) -> None:
+        try:
+            copies = int(self.replicate_copies_var.get())
+            dx = float(self.replicate_dx_var.get())
+            dy = float(self.replicate_dy_var.get())
+        except ValueError:
+            self.status_callback("Replicate: copies must be an integer; dx and dy must be numeric.")
+            return
+        result = self.model_canvas.replicate_selection(copies, dx, dy)
+        if result is not None:
+            self.show_command("Replicate")
+
+    def _cancel_replicate(self) -> None:
+        if self.command_callback is not None:
+            self.command_callback("Select / Inspect")
+        else:
+            self.model_canvas.set_active_command("Select / Inspect")
+            self.show_command("Select / Inspect")
+        self.status_callback("Replicate canceled.")
+
     def _add_material(self) -> None:
         material_id = self.material_id_var.get().strip()
         if not material_id:
@@ -845,6 +960,8 @@ class PropertyPanel(ttk.LabelFrame):
         if command == "Draw Node":
             self.x_var.set("0.0")
             self.y_var.set("0.0")
+            self.new_node_hinge_var.set(False)
+            self._sync_draw_node_hinge()
         elif command == "Draw Member":
             self.element_type_var.set("frame")
             self.material_var.set(next(iter(self.model_canvas.builder.model.materials), "M1"))

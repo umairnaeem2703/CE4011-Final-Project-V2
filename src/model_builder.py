@@ -54,8 +54,8 @@ class ModelBuilder:
         self._mark_dirty()
         return section
 
-    def add_node(self, id: int, x: float, y: float) -> Node:
-        node = Node(id=id, x=x, y=y)
+    def add_node(self, id: int, x: float, y: float, is_hinged: bool = False) -> Node:
+        node = Node(id=id, x=x, y=y, is_hinged=is_hinged)
         self.model.nodes[id] = node
         self._mark_dirty()
         return node
@@ -293,7 +293,10 @@ def export_model_to_xml(model: StructuralModel, filepath: str) -> None:
 
     nodes_el = ET.SubElement(root, "nodes")
     for node in model.nodes.values():
-        ET.SubElement(nodes_el, "node", {"id": str(node.id), "x": _fmt(node.x), "y": _fmt(node.y)})
+        attrs = {"id": str(node.id), "x": _fmt(node.x), "y": _fmt(node.y)}
+        if getattr(node, "is_hinged", False):
+            attrs["is_hinged"] = "true"
+        ET.SubElement(nodes_el, "node", attrs)
 
     if model.lumped_masses:
         lumped_masses_el = ET.SubElement(root, "lumped_masses")

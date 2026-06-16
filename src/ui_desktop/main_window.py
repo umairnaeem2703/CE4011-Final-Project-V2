@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import filedialog, simpledialog, ttk
+from tkinter import filedialog, ttk
 
 from .canvas import ModelCanvas
 from .object_tree import ObjectTreePanel
@@ -21,17 +21,24 @@ ACTIVE_COMMANDS = (
     "Assign Mass",
     "Assign Diaphragm",
     "Delete",
+    "Replicate",
 )
 PLACEHOLDER_COMMANDS = (
-    "Replicate",
     "Window Select",
 )
 COMMAND_TABS = (
     ("Model", (("action", "New"), ("action", "Open XML"), ("action", "Save XML"), ("action", "Validate"))),
     (
-        "Assign",
+        "Edit",
         (
             ("command", "Select / Inspect"),
+            ("command", "Delete"),
+            ("command", "Replicate"),
+        ),
+    ),
+    (
+        "Assign",
+        (
             ("command", "Draw Node"),
             ("command", "Draw Member"),
             ("command", "Materials / Sections"),
@@ -39,8 +46,6 @@ COMMAND_TABS = (
             ("command", "Assign Load"),
             ("command", "Assign Mass"),
             ("command", "Assign Diaphragm"),
-            ("command", "Delete"),
-            ("action", "Replicate"),
         ),
     ),
     (
@@ -175,7 +180,12 @@ class MainWindow:
         self.canvas = self.model_canvas.canvas
 
     def _build_right_panel(self) -> None:
-        self.property_panel = PropertyPanel(self.root, self.model_canvas, status_callback=self._write_status)
+        self.property_panel = PropertyPanel(
+            self.root,
+            self.model_canvas,
+            status_callback=self._write_status,
+            command_callback=self._select_command,
+        )
         self.property_panel.grid(row=1, column=2, sticky="nse", padx=(4, 8), pady=4)
         self.property_panel.columnconfigure(0, minsize=240)
 
@@ -190,6 +200,7 @@ class MainWindow:
         self.log.configure(state="disabled")
 
     def _select_command(self, name: str) -> None:
+        self.selected_command.set(name)
         self.model_canvas.set_active_command(name)
         self.property_panel.show_command(name)
         self._write_status(self.model_canvas.command_instruction())
@@ -228,9 +239,6 @@ class MainWindow:
         if name == "Save XML":
             self._save_xml()
             return
-        if name == "Replicate":
-            self._replicate_selection()
-            return
         self._write_status(f"{name}: not wired yet.")
 
     def _new_model(self) -> None:
@@ -262,29 +270,6 @@ class MainWindow:
             self._write_status(f"Save XML failed: {exc}")
             return
         self._write_status(f"Saved XML: {path}")
-
-    def _replicate_selection(self) -> None:
-        if self.model_canvas.selection_count() == 0:
-            self._write_status("Replicate: select nodes or members first.")
-            return
-        copies = simpledialog.askinteger(
-            "Replicate",
-            "Number of copies:",
-            parent=self.root,
-            minvalue=1,
-        )
-        if copies is None:
-            self._write_status("Replicate canceled.")
-            return
-        dx = simpledialog.askfloat("Replicate", "dx per copy:", parent=self.root, initialvalue=0.0)
-        if dx is None:
-            self._write_status("Replicate canceled.")
-            return
-        dy = simpledialog.askfloat("Replicate", "dy per copy:", parent=self.root, initialvalue=0.0)
-        if dy is None:
-            self._write_status("Replicate canceled.")
-            return
-        self.model_canvas.replicate_selection(copies, dx, dy)
 
     def _show_selection(self, kind: str | None, obj: object | None) -> None:
         self.property_panel.show_selection(kind, obj)

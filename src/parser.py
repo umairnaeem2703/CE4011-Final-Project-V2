@@ -34,6 +34,7 @@ class Node:
     id: int
     x: float
     y: float
+    is_hinged: bool = False
     dofs: List[int] = field(default_factory=list)
 
 @dataclass
@@ -47,6 +48,12 @@ class Element:
     release_start: bool = False
     release_end: bool = False
     is_axially_rigid: bool = False
+
+    def effective_release_start(self) -> bool:
+        return self.release_start or bool(getattr(self.node_i, "is_hinged", False))
+
+    def effective_release_end(self) -> bool:
+        return self.release_end or bool(getattr(self.node_j, "is_hinged", False))
 
 @dataclass
 class Support:
@@ -386,7 +393,8 @@ class XMLParser:
             n_id = int(n.attrib['id'])
             x = float(n.attrib['x'])
             y = float(n.attrib['y'])
-            self.model.nodes[n_id] = Node(id=n_id, x=x, y=y)
+            is_hinged = n.attrib.get('is_hinged', 'false').lower() == 'true'
+            self.model.nodes[n_id] = Node(id=n_id, x=x, y=y, is_hinged=is_hinged)
 
     def _parse_elements(self):
         elements_node = self.root.find('elements')

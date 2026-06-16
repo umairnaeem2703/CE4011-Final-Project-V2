@@ -49,10 +49,11 @@ class ModelCanvas(ttk.Frame):
         self.builder = ModelBuilder(name="Desktop Model")
         self._ensure_placeholder_properties()
 
-        self.active_command = "Select / Inspect"
+        self.active_command: str | None = None
         self.active_element_type = "frame"
         self.active_material_id = "M1"
         self.active_section_id = "S1"
+        self.active_node_is_hinged = False
         self.support_settings = SupportSettings()
         self.load_settings = LoadSettings()
         self.support_action = "Replace"
@@ -148,7 +149,7 @@ class ModelCanvas(ttk.Frame):
         self.redraw_model()
 
     def set_active_command(self, command: str) -> None:
-        self.active_command = command
+        self.active_command = None if command == "Select / Inspect" else command
         if command != "Pan":
             self._pan_last = None
         if command != "Select / Inspect":
@@ -178,6 +179,8 @@ class ModelCanvas(ttk.Frame):
             return "Assign Diaphragm: select nodes, choose a group id/action, then apply."
         if self.active_command == "Delete":
             return "Delete: click a node or member to remove it."
+        if self.active_command == "Replicate":
+            return "Replicate: select nodes or members, set copies/dx/dy, then apply."
         return "Select / Inspect: click a node or member to inspect it."
 
     def set_active_element_type(self, element_type: str) -> None:
@@ -188,6 +191,9 @@ class ModelCanvas(ttk.Frame):
 
     def set_active_section(self, section_id: str) -> None:
         self.active_section_id = section_id
+
+    def set_active_node_hinge(self, is_hinged: bool) -> None:
+        self.active_node_is_hinged = bool(is_hinged)
 
     def set_draw_mode(self, draw_mode: str) -> None:
         self.draw_mode = draw_mode
@@ -251,7 +257,7 @@ class ModelCanvas(ttk.Frame):
     def selection_count(self) -> int:
         return self._selection_count()
 
-    def add_node_by_coordinates(self, x: float, y: float) -> int:
+    def add_node_by_coordinates(self, x: float, y: float, *, is_hinged: bool | None = None) -> int:
         existing_node_id = self._find_node_near_model_point(x, y)
         if existing_node_id is not None:
             self.select_node(existing_node_id)
@@ -259,7 +265,8 @@ class ModelCanvas(ttk.Frame):
 
         node_id = self.next_node_id
         self.next_node_id += 1
-        self.builder.add_node(node_id, x, y)
+        node_is_hinged = self.active_node_is_hinged if is_hinged is None else bool(is_hinged)
+        self.builder.add_node(node_id, x, y, is_hinged=node_is_hinged)
         self.redraw_model()
         self.select_node(node_id)
         self.change_callback()
@@ -276,7 +283,7 @@ class ModelCanvas(ttk.Frame):
         angle_radians = math.radians(angle_degrees)
         end_x = start_node.x + length * math.cos(angle_radians)
         end_y = start_node.y + length * math.sin(angle_radians)
-        end_node_id = self.add_node_by_coordinates(end_x, end_y)
+        end_node_id = self.add_node_by_coordinates(end_x, end_y, is_hinged=False)
         return self._create_element(start_node_id, end_node_id)
 
     def select_node(self, node_id: int) -> None:
@@ -317,7 +324,7 @@ class ModelCanvas(ttk.Frame):
     def _handle_button_press(self, event) -> None:
         if self.active_command == "Pan":
             self._pan_last = (event.x, event.y)
-        elif self.active_command == "Select / Inspect" and not self._event_has_ctrl(event):
+        elif self._is_neutral_selection_mode() and not self._event_has_ctrl(event):
             node_id = self._find_node_near_canvas_point(event.x, event.y)
             element_id = self._find_element_near_canvas_point(event.x, event.y) if node_id is None else None
             if node_id is None and element_id is None:
@@ -325,7 +332,7 @@ class ModelCanvas(ttk.Frame):
                 self._window_dragging = False
 
     def _handle_drag(self, event) -> None:
-        if self.active_command == "Select / Inspect" and self._window_start is not None:
+        if self._is_neutral_selection_mode() and self._window_start is not None:
             self._update_window_selection_preview(event.x, event.y)
             return
         if self.active_command != "Pan" or self._pan_last is None:
@@ -337,7 +344,7 @@ class ModelCanvas(ttk.Frame):
         self.redraw_model()
 
     def _handle_button_release(self, event) -> None:
-        if self.active_command == "Select / Inspect" and self._window_start is not None:
+        if self._is_neutral_selection_mode() and self._window_start is not None:
             self._finish_window_selection(event.x, event.y)
         self._pan_last = None
 
@@ -353,7 +360,7 @@ class ModelCanvas(ttk.Frame):
         elif self.active_command == "Draw Member":
             if node_id is None:
                 x, y = self._canvas_to_model_point(event.x, event.y)
-                node_id = self.add_node_by_coordinates(x, y)
+                node_id = self.add_node_by_coordinates(x, y, is_hinged=False)
             self._set_pending_or_create_element(node_id)
         elif self.active_command == "Delete":
             self._delete_target(node_id, element_id)
@@ -402,6 +409,9 @@ class ModelCanvas(ttk.Frame):
         else:
             self.clear_selection()
             self.status_callback(self.command_instruction())
+
+    def _is_neutral_selection_mode(self) -> bool:
+        return self.active_command in (None, "Materials / Sections", "Replicate")
 
     def _set_pending_or_create_element(self, node_id: int) -> None:
         if self.pending_start_node_id is None:
@@ -557,7 +567,12 @@ class ModelCanvas(ttk.Frame):
                     continue
                 new_node_id = self.next_node_id
                 self.next_node_id += 1
-                self.builder.add_node(new_node_id, old_node.x + offset_x, old_node.y + offset_y)
+                self.builder.add_node(
+                    new_node_id,
+                    old_node.x + offset_x,
+                    old_node.y + offset_y,
+                    is_hinged=getattr(old_node, "is_hinged", False),
+                )
                 node_map[old_node_id] = new_node_id
                 new_node_ids.add(new_node_id)
 
@@ -976,6 +991,22 @@ class ModelCanvas(ttk.Frame):
         self.status_callback(f"Updated node {node_id} coordinates to ({x:.6g}, {y:.6g}).")
         return node
 
+    def update_selected_node_hinge(self, is_hinged: bool):
+        if self.selected_kind != "node" or self.selected_id not in self.builder.model.nodes:
+            self.status_callback("Node Hinge: select one node first.")
+            return None
+
+        node_id = int(self.selected_id)
+        node = self.builder.model.nodes[node_id]
+        node.is_hinged = bool(is_hinged)
+        self._mark_model_dirty()
+        self.redraw_model()
+        self.select_node(node_id)
+        self.change_callback()
+        state = "hinged" if node.is_hinged else "moment-continuous"
+        self.status_callback(f"Node {node_id} set to {state}.")
+        return node
+
     def _remove_loads(self, load_case_id: str, matches) -> int:
         load_case = self.builder.model.load_cases.get(load_case_id)
         if load_case is None:
@@ -1017,7 +1048,9 @@ class ModelCanvas(ttk.Frame):
     def _draw_node(self, node_id: int, x: float, y: float) -> None:
         cx, cy = self._model_to_canvas(x, y)
         r = self.node_radius
-        item_id = self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill="#1f77b4", outline="")
+        node = self.builder.model.nodes[node_id]
+        fill, outline, width = self._node_style(node)
+        item_id = self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=fill, outline=outline, width=width)
         label_id = self.canvas.create_text(cx + 10, cy - 10, text=str(node_id), fill="#1f77b4", anchor="w")
         self.canvas.addtag_withtag("node", item_id)
         self.canvas.addtag_withtag("node-label", label_id)
@@ -1034,6 +1067,31 @@ class ModelCanvas(ttk.Frame):
         self.canvas.tag_lower(item_id)
         self.item_to_element_id[item_id] = element_id
         self.element_id_to_item[element_id] = item_id
+        element = self.builder.model.elements[element_id]
+        if element_type == "truss" or element.release_start:
+            self._draw_member_end_hinge_symbol(x1, y1, x2, y2, color)
+        if element_type == "truss" or element.release_end:
+            self._draw_member_end_hinge_symbol(x2, y2, x1, y1, color)
+
+    def _draw_member_end_hinge_symbol(self, x: float, y: float, toward_x: float, toward_y: float, color: str) -> None:
+        length = math.hypot(toward_x - x, toward_y - y)
+        if length <= 0:
+            return
+        ux = (toward_x - x) / length
+        uy = (toward_y - y) / length
+        cx = x + ux * (self.node_radius + 5)
+        cy = y + uy * (self.node_radius + 5)
+        r = max(3, self.node_radius - 1)
+        self.canvas.create_oval(
+            cx - r,
+            cy - r,
+            cx + r,
+            cy + r,
+            fill="white",
+            outline=color,
+            width=2,
+            tags="symbol",
+        )
 
     def _draw_model_symbols(self) -> None:
         for support in self.builder.model.supports.values():
@@ -1125,11 +1183,11 @@ class ModelCanvas(ttk.Frame):
     def _draw_settlement_symbol(self, x: float, y: float, support) -> None:
         if support.settlement_ux:
             dx = 1 if support.settlement_ux > 0 else -1
-            head_x, head_y = self._draw_vector_arrow(x + 12 * dx, y + 24, dx, 0, length=18, color="#c00000")
+            head_x, head_y = self._draw_vector_arrow(x, y, dx, 0, length=18, color="#c00000")
             self._draw_symbol_label(head_x + 4 * dx, head_y + 8, f"ux={_fmt_value(support.settlement_ux)}", "#c00000")
         if support.settlement_uy:
             dy = -1 if support.settlement_uy > 0 else 1
-            head_x, head_y = self._draw_vector_arrow(x - 22, y + 12 * dy, 0, dy, length=18, color="#c00000")
+            head_x, head_y = self._draw_vector_arrow(x, y, 0, dy, length=18, color="#c00000")
             self._draw_symbol_label(head_x - 4, head_y + 6 * dy, f"uy={_fmt_value(support.settlement_uy)}", "#c00000")
         if support.settlement_rz:
             self._draw_curved_arrow(x, y, clockwise=support.settlement_rz < 0, color="#c00000", radius=15)
@@ -1142,11 +1200,11 @@ class ModelCanvas(ttk.Frame):
         x, y = self._model_to_canvas(node.x, node.y)
         if load.fx:
             dx = 1 if load.fx > 0 else -1
-            head_x, head_y = self._draw_vector_arrow(x + 8 * dx, y + 12, dx, 0, length=22, color="#d62728")
+            head_x, head_y = self._draw_vector_arrow(x, y, dx, 0, length=22, color="#d62728")
             self._draw_symbol_label(head_x + 4 * dx, head_y + 9, f"Fx={_fmt_value(load.fx)}", "#d62728")
         if load.fy:
             dy = -1 if load.fy > 0 else 1
-            head_x, head_y = self._draw_vector_arrow(x - 12, y + 8 * dy, 0, dy, length=22, color="#d62728")
+            head_x, head_y = self._draw_vector_arrow(x, y, 0, dy, length=22, color="#d62728")
             self._draw_symbol_label(head_x - 4, head_y + 6 * dy, f"Fy={_fmt_value(load.fy)}", "#d62728")
         if load.mz:
             self._draw_curved_arrow(x, y, clockwise=load.mz < 0, color="#d62728", radius=17)
@@ -1312,8 +1370,10 @@ class ModelCanvas(ttk.Frame):
         self.canvas.create_line(self.view_origin_x, 0, self.view_origin_x, height, fill="#d0d0d0", tags="grid")
 
     def _apply_selection_highlight(self) -> None:
-        for item_id in self.node_id_to_item.values():
-            self.canvas.itemconfigure(item_id, width=1, outline="")
+        for node_id, item_id in self.node_id_to_item.items():
+            node = self.builder.model.nodes.get(node_id)
+            fill, outline, width = self._node_style(node)
+            self.canvas.itemconfigure(item_id, fill=fill, outline=outline, width=width)
         for item_id in self.element_id_to_item.values():
             self.canvas.itemconfigure(item_id, width=3)
 
@@ -1323,6 +1383,11 @@ class ModelCanvas(ttk.Frame):
         for element_id in self.selected_element_ids:
             if element_id in self.element_id_to_item:
                 self.canvas.itemconfigure(self.element_id_to_item[element_id], width=6)
+
+    def _node_style(self, node) -> tuple[str, str, int]:
+        if node is not None and getattr(node, "is_hinged", False):
+            return "", "#1f77b4", 2
+        return "#1f77b4", "", 1
 
     def _find_node_near_canvas_point(self, canvas_x: float, canvas_y: float) -> int | None:
         for node_id, item_id in self.node_id_to_item.items():

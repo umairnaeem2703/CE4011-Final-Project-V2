@@ -153,6 +153,25 @@ def test_model_builder_xml_export_round_trips_direct_ea_ei(tmp_path):
     assert parsed_section.EI == pytest.approx(56.7)
 
 
+def test_model_builder_xml_export_round_trips_node_hinge(tmp_path):
+    builder = ModelBuilder(name="Node Hinge Round Trip")
+    builder.add_material("m1", E=200000.0)
+    builder.add_section("s1", A=0.02, I=0.0001)
+    builder.add_node(1, 0.0, 0.0)
+    builder.add_node(2, 3.0, 0.0, is_hinged=True)
+    builder.add_element("e1", "frame", 1, 2, "m1", "s1")
+    builder.add_support(1, restrain_ux=True, restrain_uy=True, restrain_rz=True)
+
+    xml_path = tmp_path / "node_hinge_round_trip.xml"
+    builder.export_xml(xml_path)
+    node_el = ET.parse(xml_path).getroot().find("./nodes/node[@id='2']")
+    parsed = XMLParser(xml_path).parse()
+
+    assert node_el.attrib["is_hinged"] == "true"
+    assert parsed.nodes[2].is_hinged is True
+    assert parsed.elements["e1"].effective_release_end() is True
+
+
 def test_model_builder_xml_export_round_trips_lumped_mass(tmp_path):
     builder = ModelBuilder(name="Mass Round Trip")
     builder.add_material("m1", E=200000.0)

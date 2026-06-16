@@ -136,8 +136,8 @@ class ElementPhysics:
         if self.element.type == 'truss':
             return "pin-pin"
 
-        rel_i = self.element.release_start
-        rel_j = self.element.release_end
+        rel_i = self.element.effective_release_start()
+        rel_j = self.element.effective_release_end()
 
         if model is not None:
             # Check if node_i is a boundary pin (single frame connection)
@@ -212,9 +212,9 @@ class ElementPhysics:
             return k_local, fef_local 
 
         condensed_dofs = []
-        if self.element.release_start:
+        if self.element.effective_release_start():
             condensed_dofs.append(2) # Mz at node i
-        if self.element.release_end:
+        if self.element.effective_release_end():
             condensed_dofs.append(5) # Mz at node j
 
         if not condensed_dofs:
