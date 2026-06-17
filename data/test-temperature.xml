@@ -1,0 +1,28 @@
+<?xml version='1.0' encoding='utf-8'?>
+<model name="New Model" unit_system="kN_m_tonne">
+  <materials>
+    <material id="M1" E="1" alpha="0" density="0" />
+  </materials>
+  <sections>
+    <section id="BEAM" A="1" I="1" d="0" />
+  </sections>
+  <nodes>
+    <node id="1" x="-4" y="0" />
+    <node id="2" x="0" y="8" />
+    <node id="3" x="6" y="0" />
+    <node id="4" x="-7" y="8" />
+    <node id="5" x="9" y="8" />
+  </nodes>
+  <elements>
+    <truss id="E1" node_i="1" node_j="2" material="M1" section="BEAM" />
+    <truss id="E2" node_i="2" node_j="3" material="M1" section="BEAM" />
+    <frame id="E3" node_i="4" node_j="2" material="M1" section="BEAM" />
+    <frame id="E4" node_i="2" node_j="5" material="M1" section="BEAM" />
+  </elements>
+  <boundary_conditions>
+    <support node="1" ux="1" uy="1" rz="0" />
+    <support node="3" ux="1" uy="1" rz="0" />
+    <support node="4" ux="1" uy="1" rz="1" />
+    <support node="5" ux="1" uy="1" rz="0" />
+  </boundary_conditions>
+</model>

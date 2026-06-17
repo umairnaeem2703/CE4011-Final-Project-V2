@@ -235,6 +235,55 @@ class ModelBuilder:
         self._mark_dirty()
         return group
 
+    def rename_node(self, old_id: int, new_id: int) -> Node:
+        if not isinstance(new_id, int) or isinstance(new_id, bool):
+            raise ValueError("Node id must be an integer.")
+        if old_id not in self.model.nodes:
+            raise KeyError(f"Unknown node id {old_id!r}.")
+        if old_id == new_id:
+            return self.model.nodes[old_id]
+        if new_id in self.model.nodes:
+            raise ValueError(f"Node id {new_id!r} already exists.")
+
+        node = self.model.nodes.pop(old_id)
+        node.id = new_id
+        self.model.nodes[new_id] = node
+
+        support = self.model.supports.pop(old_id, None)
+        if support is not None:
+            self.model.supports[new_id] = support
+
+        mass = self.model.lumped_masses.pop(old_id, None)
+        if mass is not None:
+            if hasattr(mass, "node"):
+                mass.node = node
+            self.model.lumped_masses[new_id] = mass
+
+        for group_id, node_ids in list(self.model.diaphragm_ux_groups.items()):
+            self.model.diaphragm_ux_groups[group_id] = [
+                new_id if node_id == old_id else node_id for node_id in node_ids
+            ]
+
+        self._mark_dirty()
+        return node
+
+    def rename_element(self, old_id: str, new_id: str) -> Element:
+        new_id = str(new_id).strip()
+        if not new_id:
+            raise ValueError("Member id is required.")
+        if old_id not in self.model.elements:
+            raise KeyError(f"Unknown element id {old_id!r}.")
+        if old_id == new_id:
+            return self.model.elements[old_id]
+        if new_id in self.model.elements:
+            raise ValueError(f"Member id {new_id!r} already exists.")
+
+        element = self.model.elements.pop(old_id)
+        element.id = new_id
+        self.model.elements[new_id] = element
+        self._mark_dirty()
+        return element
+
     def build(self, validate: bool = False) -> StructuralModel:
         if validate:
             StructuralValidator(self.model).validate()

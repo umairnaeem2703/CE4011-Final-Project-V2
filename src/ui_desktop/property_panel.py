@@ -32,6 +32,8 @@ class PropertyPanel(ttk.LabelFrame):
         self.member_material_var = tk.StringVar(value="")
         self.member_section_var = tk.StringVar(value="")
         self.member_type_var = tk.StringVar(value="frame")
+        self.selected_node_id_var = tk.StringVar(value="")
+        self.selected_member_id_var = tk.StringVar(value="")
         self.selected_node_x_var = tk.StringVar(value="")
         self.selected_node_y_var = tk.StringVar(value="")
         self.new_node_hinge_var = tk.BooleanVar(value=False)
@@ -208,6 +210,7 @@ class PropertyPanel(ttk.LabelFrame):
         self._title("Select / Inspect")
         if self.selected_kind == "node" and self.selected_object is not None:
             node = self.selected_object
+            self.selected_node_id_var.set(str(node.id))
             self.selected_node_x_var.set(f"{node.x:.6g}")
             self.selected_node_y_var.set(f"{node.y:.6g}")
             support = self.model_canvas.builder.model.supports.get(node.id)
@@ -225,6 +228,7 @@ class PropertyPanel(ttk.LabelFrame):
         elif self.selected_kind == "element" and self.selected_object is not None:
             element = self.selected_object
             loads_text = _member_load_summary(self.model_canvas.builder.model, element.id)
+            self.selected_member_id_var.set(element.id)
             self.member_material_var.set(element.material.id)
             self.member_section_var.set(element.section.id)
             self.member_type_var.set(element.type)
@@ -256,9 +260,11 @@ class PropertyPanel(ttk.LabelFrame):
             ttk.Label(info, text=label).grid(row=row, column=0, sticky="w", pady=2)
             ttk.Label(info, text=str(value)).grid(row=row, column=1, sticky="w", pady=2)
         if self.selected_kind == "node" and self.selected_object is not None:
-            self._node_coordinate_editor(start_row=2)
+            self._node_id_editor(start_row=2)
+            self._node_coordinate_editor(start_row=3)
         if self.selected_kind == "element" and self.selected_object is not None:
-            self._member_properties_editor(start_row=2)
+            self._member_id_editor(start_row=2)
+            self._member_properties_editor(start_row=3)
 
     def _placeholder_panel(self, title: str, text: str) -> None:
         self._title(title)
@@ -573,6 +579,44 @@ class PropertyPanel(ttk.LabelFrame):
             pady=(8, 0),
         )
 
+    def _member_id_editor(self, start_row: int) -> None:
+        editor = ttk.LabelFrame(self, text="Member ID", padding=6)
+        editor.grid(row=start_row, column=0, sticky="ew", pady=(8, 0))
+        editor.columnconfigure(1, weight=1)
+        ttk.Label(editor, text="id").grid(row=0, column=0, sticky="w", pady=2)
+        ttk.Entry(editor, textvariable=self.selected_member_id_var, width=12).grid(
+            row=0,
+            column=1,
+            sticky="ew",
+            pady=2,
+        )
+        ttk.Button(editor, text="Apply Member ID", command=self._apply_member_id).grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            pady=(8, 0),
+        )
+
+    def _node_id_editor(self, start_row: int) -> None:
+        editor = ttk.LabelFrame(self, text="Node ID", padding=6)
+        editor.grid(row=start_row, column=0, sticky="ew", pady=(8, 0))
+        editor.columnconfigure(1, weight=1)
+        ttk.Label(editor, text="id").grid(row=0, column=0, sticky="w", pady=2)
+        ttk.Entry(editor, textvariable=self.selected_node_id_var, width=12).grid(
+            row=0,
+            column=1,
+            sticky="ew",
+            pady=2,
+        )
+        ttk.Button(editor, text="Apply Node ID", command=self._apply_node_id).grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            pady=(8, 0),
+        )
+
     def _node_coordinate_editor(self, start_row: int) -> None:
         editor = ttk.LabelFrame(self, text="Node Coordinates", padding=6)
         editor.grid(row=start_row, column=0, sticky="ew", pady=(8, 0))
@@ -839,6 +883,37 @@ class PropertyPanel(ttk.LabelFrame):
             self.status_callback("Member Properties: choose material and section.")
             return
         updated = self.model_canvas.update_selected_member_properties(element_type, material_id, section_id)
+        if updated is not None:
+            self.selected_object = updated
+            self.show_command("Select / Inspect")
+
+    def _apply_member_id(self) -> None:
+        if self.selected_kind != "element" or self.selected_object is None:
+            self.status_callback("Member ID: select one member first.")
+            return
+        new_id = self.selected_member_id_var.get().strip()
+        if not new_id:
+            self.status_callback("Member ID: id is required.")
+            return
+        updated = self.model_canvas.rename_selected_member(new_id)
+        if updated is not None:
+            self.selected_object = updated
+            self.show_command("Select / Inspect")
+
+    def _apply_node_id(self) -> None:
+        if self.selected_kind != "node" or self.selected_object is None:
+            self.status_callback("Node ID: select one node first.")
+            return
+        raw_id = self.selected_node_id_var.get().strip()
+        if not raw_id:
+            self.status_callback("Node ID: id is required.")
+            return
+        try:
+            new_id = int(raw_id)
+        except ValueError:
+            self.status_callback("Node ID: id must be an integer.")
+            return
+        updated = self.model_canvas.rename_selected_node(new_id)
         if updated is not None:
             self.selected_object = updated
             self.show_command("Select / Inspect")
