@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+import math
 from typing import Dict, List
 
 # ==========================================
@@ -13,6 +14,7 @@ class Material:
     E: float
     alpha: float = 0.0  # Coefficient of thermal expansion
     density: float = 0.0
+    type: str = "Generic"
 
 @dataclass
 class Section:
@@ -22,12 +24,42 @@ class Section:
     d: float = 0.0      # Section depth
     EA: float | None = None
     EI: float | None = None
+    shape: str = "Generic"
+    material_id: str = ""
+    depth: float | None = None
+    width: float | None = None
+    outside_diameter: float | None = None
+    wall_thickness: float | None = None
 
     def effective_EA(self, material: Material) -> float:
-        return self.EA if self.EA is not None else material.E * self.A
+        area, _ = self.effective_area_inertia()
+        if area > 0.0:
+            return material.E * area
+        if self.EA is not None:
+            return self.EA
+        return material.E * self.A
 
     def effective_EI(self, material: Material) -> float:
-        return self.EI if self.EI is not None else material.E * self.I
+        _, inertia = self.effective_area_inertia()
+        if inertia > 0.0:
+            return material.E * inertia
+        if self.EI is not None:
+            return self.EI
+        return material.E * self.I
+
+    def effective_area_inertia(self) -> tuple[float, float]:
+        shape = (self.shape or "Generic").strip().lower()
+        if shape == "rectangular" and self.depth and self.width:
+            area = self.width * self.depth
+            inertia = self.width * self.depth**3 / 12.0
+            return area, inertia
+        if shape == "pipe" and self.outside_diameter and self.wall_thickness:
+            inner_diameter = self.outside_diameter - 2.0 * self.wall_thickness
+            if inner_diameter >= 0.0:
+                area = math.pi * (self.outside_diameter**2 - inner_diameter**2) / 4.0
+                inertia = math.pi * (self.outside_diameter**4 - inner_diameter**4) / 64.0
+                return area, inertia
+        return self.A, self.I
 
 @dataclass
 class Node:
@@ -240,6 +272,11 @@ def _components_from_direction(
         return 0.0, value
     raise ValueError(f"Member load direction must be X/Y or 1/2, got {direction!r}.")
 
+
+def _optional_float_attr(element, name: str) -> float | None:
+    value = element.attrib.get(name)
+    return None if value in (None, "") else float(value)
+
 @dataclass
 class TemperatureL(MemberLoad):
     Tu: float = 0.0  # Temperature at top surface
@@ -376,7 +413,8 @@ class XMLParser:
             E = float(mat.attrib['E'])
             alpha = float(mat.attrib.get('alpha', 0.0))
             density = float(mat.attrib.get('density', mat.attrib.get('rho', 0.0)))
-            self.model.materials[m_id] = Material(id=m_id, E=E, alpha=alpha, density=density)
+            material_type = mat.attrib.get('type', 'Generic')
+            self.model.materials[m_id] = Material(id=m_id, E=E, alpha=alpha, density=density, type=material_type)
 
     def _parse_sections(self):
         for sec in self.root.find('sections').findall('section'):
@@ -386,7 +424,20 @@ class XMLParser:
             d = float(sec.attrib.get('d', 0.0))
             EA = float(sec.attrib['EA']) if 'EA' in sec.attrib else None
             EI = float(sec.attrib['EI']) if 'EI' in sec.attrib else None
-            self.model.sections[s_id] = Section(id=s_id, A=A, I=I, d=d, EA=EA, EI=EI)
+            self.model.sections[s_id] = Section(
+                id=s_id,
+                A=A,
+                I=I,
+                d=d,
+                EA=EA,
+                EI=EI,
+                shape=sec.attrib.get('shape', 'Generic'),
+                material_id=sec.attrib.get('material_id', ''),
+                depth=_optional_float_attr(sec, 'depth'),
+                width=_optional_float_attr(sec, 'width'),
+                outside_diameter=_optional_float_attr(sec, 'outside_diameter'),
+                wall_thickness=_optional_float_attr(sec, 'wall_thickness'),
+            )
 
     def _parse_nodes(self):
         for n in self.root.find('nodes').findall('node'):

@@ -34,8 +34,15 @@ class ModelBuilder:
             self.model.unit_system = unit_system
             self._mark_dirty()
 
-    def add_material(self, id: str, E: float, alpha: float = 0.0, density: float = 0.0) -> Material:
-        material = Material(id=id, E=E, alpha=alpha, density=density)
+    def add_material(
+        self,
+        id: str,
+        E: float,
+        alpha: float = 0.0,
+        density: float = 0.0,
+        type: str = "Generic",
+    ) -> Material:
+        material = Material(id=id, E=E, alpha=alpha, density=density, type=type)
         self.model.materials[id] = material
         self._mark_dirty()
         return material
@@ -48,8 +55,27 @@ class ModelBuilder:
         d: float = 0.0,
         EA: float | None = None,
         EI: float | None = None,
+        shape: str = "Generic",
+        material_id: str = "",
+        depth: float | None = None,
+        width: float | None = None,
+        outside_diameter: float | None = None,
+        wall_thickness: float | None = None,
     ) -> Section:
-        section = Section(id=id, A=A, I=I, d=d, EA=EA, EI=EI)
+        section = Section(
+            id=id,
+            A=A,
+            I=I,
+            d=d,
+            EA=EA,
+            EI=EI,
+            shape=shape,
+            material_id=material_id,
+            depth=depth,
+            width=width,
+            outside_diameter=outside_diameter,
+            wall_thickness=wall_thickness,
+        )
         self.model.sections[id] = section
         self._mark_dirty()
         return section
@@ -275,12 +301,24 @@ def export_model_to_xml(model: StructuralModel, filepath: str) -> None:
                 "E": _fmt(material.E),
                 "alpha": _fmt(material.alpha),
                 "density": _fmt(material.density),
+                "type": getattr(material, "type", "Generic"),
             },
         )
 
     sections_el = ET.SubElement(root, "sections")
     for section in sorted(model.sections.values(), key=lambda item: item.id):
         attrs = {"id": section.id, "A": _fmt(section.A), "I": _fmt(section.I), "d": _fmt(section.d)}
+        for attr_name in (
+            "shape",
+            "material_id",
+            "depth",
+            "width",
+            "outside_diameter",
+            "wall_thickness",
+        ):
+            value = getattr(section, attr_name, None)
+            if value not in (None, ""):
+                attrs[attr_name] = _fmt(value) if isinstance(value, (int, float)) else str(value)
         if section.EA is not None:
             attrs["EA"] = _fmt(section.EA)
         if section.EI is not None:
