@@ -39,6 +39,7 @@ from .result_formatting import (
     labeled_matrix_columns,
     labeled_matrix_rows,
     unit_labels,
+    unwrap_scalar,
 )
 from .template_dialog import ask_new_model
 

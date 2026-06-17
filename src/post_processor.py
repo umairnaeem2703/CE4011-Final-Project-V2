@@ -56,6 +56,14 @@ class PostProcessor:
                         disp.append(0.0)
             self.displacements[n_id] = disp
 
+    def sap2000_displacements(self):
+        """Return nodal displacements in SAP2000 X-Z plane display order."""
+        rows = {}
+        for node_id, disp in self.displacements.items():
+            ux, uy, rz = disp
+            rows[node_id] = [ux, 0.0, uy, 0.0, -rz, 0.0]
+        return rows
+
     def _compute_forces_and_reactions(self):
         """
         Calculates local member forces and global support reactions using the correct pipeline:
@@ -251,6 +259,21 @@ class PostProcessor:
             for n_id in sorted(self.displacements.keys()):
                 disp = self.displacements[n_id]
                 f.write(f"{n_id:<8} {disp[0]:<15.6e} {disp[1]:<15.6e} {disp[2]:<15.6e}\n")
+            f.write("\n")
+
+            f.write("1b. NODAL DISPLACEMENTS (SAP2000 X-Z VIEW)\n")
+            f.write("-" * 100 + "\n")
+            f.write(
+                f"{'Node':<8} {'U1 (m)':<15} {'U2 (m)':<15} {'U3 (m)':<15} "
+                f"{'R1 (rad)':<15} {'R2 (rad)':<15} {'R3 (rad)':<15}\n"
+            )
+            sap_displacements = self.sap2000_displacements()
+            for n_id in sorted(self.displacements.keys()):
+                u1, u2, u3, r1, r2, r3 = sap_displacements[n_id]
+                f.write(
+                    f"{n_id:<8} {u1:<15.6e} {u2:<15.6e} {u3:<15.6e} "
+                    f"{r1:<15.6e} {r2:<15.6e} {r3:<15.6e}\n"
+                )
             f.write("\n")
             
             # --- MEMBER FORCES ---

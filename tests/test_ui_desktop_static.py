@@ -799,6 +799,32 @@ def test_desktop_static_result_tables_use_cached_result_fields():
     assert rows == [("N1 UX", "10"), ("N1 UY", "0")]
 
 
+def test_desktop_static_displacements_are_visible_at_default_tolerance():
+    results = SimpleNamespace(
+        displacements={
+            1: [0.0, 0.0, -6.607477511e-4],
+            2: [3.590705577e-6, -1.993742507e-3, -1.738113785e-4],
+        },
+        reactions={},
+        element_forces={},
+        dof_map={},
+        K=None,
+        Kff=None,
+        F=None,
+        Ff=None,
+    )
+    window = _window_with_model()
+    window.result_display_tolerance = main_window.DEFAULT_DISPLAY_TOLERANCE
+    window.latest_static_result = results
+    window.latest_static_results = results
+
+    columns, rows = window._static_result_table_data("Nodal Displacements")
+
+    assert columns == ("Node", "UX [m]", "UY [m]", "RZ [rad]")
+    assert rows[0] == ("1", "0", "0", "-0.000660748")
+    assert rows[1] == ("2", "0.000003591", "-0.001993743", "-0.000173811")
+
+
 def test_desktop_matrix_labels_use_node_dof_names_from_dof_map():
     labels = dof_equation_labels({1: [-1, -1, 3], 2: [0, 1, 2]})
 

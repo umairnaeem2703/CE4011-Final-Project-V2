@@ -28,7 +28,7 @@ from dof_optimizer import DOFOptimizer
 from matrix_assembly import MatrixAssembler
 from banded_solver import BandedSolver
 from post_processor import PostProcessor
-from sap2000_parser import SAP2000Parser, MemberForceTransformer
+from sap2000_parser import SAP2000Parser, MemberForceTransformer, assert_displacement_match, assert_force_match
 
 
 class StrictSAP2000TestBase(unittest.TestCase):
@@ -135,6 +135,58 @@ class StrictSAP2000TestBase(unittest.TestCase):
                                 f"Element {elem_id} Node {node_label} Fy")
         self._assert_float_equal(comp_mz, exp_mz, self.FORCE_MOM_TOL,
                                 f"Element {elem_id} Node {node_label} Mz")
+
+
+class TestSettlementBenchmark(StrictSAP2000TestBase):
+    """Validate the support-settlement benchmark against SAP2000 output."""
+
+    def test_settlement_displacements_and_reactions(self):
+        xml_path = os.path.join(os.path.dirname(__file__), "../data/test-settlement.xml")
+        sap_path = os.path.join(os.path.dirname(__file__), "../sap2000/test-settlement.txt")
+
+        sap_parser = SAP2000Parser(sap_path)
+        sap_disp, sap_react, _ = sap_parser.parse()
+        self.assertTrue(sap_disp, "SAP2000 displacement table was not parsed.")
+        self.assertTrue(sap_react, "SAP2000 reaction table was not parsed.")
+
+        model = XMLParser(xml_path).parse()
+        processor = self._run_full_analysis(model, load_case="LC1")
+
+        for node_id, expected_disp in sap_disp.items():
+            self.assertIn(node_id, processor.displacements)
+            match, error_msg = assert_displacement_match(
+                processor.displacements[node_id],
+                expected_disp,
+            )
+            self.assertTrue(match, f"Settlement node {node_id} displacement mismatch:\n{error_msg}")
+
+        for node_id, expected_reaction in sap_react.items():
+            self.assertIn(node_id, processor.reactions)
+            match, error_msg = assert_force_match(
+                processor.reactions[node_id],
+                expected_reaction,
+            )
+            self.assertTrue(match, f"Settlement node {node_id} reaction mismatch:\n{error_msg}")
+
+    def test_settlement_sap2000_displacement_display_mapping(self):
+        xml_path = os.path.join(os.path.dirname(__file__), "../data/test-settlement.xml")
+        model = XMLParser(xml_path).parse()
+        processor = self._run_full_analysis(model, load_case="LC1")
+
+        expected = {
+            1: (0.0, 0.0, 0.0, 0.0, 0.000656, 0.0),
+            2: (3.549e-06, 0.0, -0.001994, 0.0, 0.000173, 0.0),
+            3: (5.320e-06, 0.0, -0.000954, 0.0, -0.000280, 0.0),
+            4: (5.320e-06, 0.0, -0.000112, 0.0, -0.000280, 0.0),
+            5: (0.0, 0.0, -0.002000, 0.0, -0.000082, 0.0),
+            6: (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        }
+
+        sap_display = processor.sap2000_displacements()
+        for node_id, expected_row in expected.items():
+            self.assertIn(node_id, sap_display)
+            for computed, reference in zip(sap_display[node_id], expected_row):
+                self.assertLessEqual(abs(computed - reference), 5.0e-6)
 
 
 class TestAssignment4Q2b(StrictSAP2000TestBase):
@@ -274,4 +326,3 @@ class TestEg1TrussThermal(StrictSAP2000TestBase):
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
-

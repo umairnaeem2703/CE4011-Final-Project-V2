@@ -2,7 +2,7 @@
 <model name="New Model" unit_system="kN_m_tonne">
   <materials>
     <material id="Concrete" E="30000000" alpha="0" density="0" type="Concrete" />
-    <material id="Steel" E="2000000000" alpha="0" density="0" type="Steel" />
+    <material id="Steel" E="200000000" alpha="0" density="0" type="Steel" />
   </materials>
   <sections>
     <section id="FRAME" A="0.25" I="0.00520833333333" d="0.5" shape="Rectangular" material_id="Concrete" depth="0.5" width="0.5" />
@@ -28,4 +28,7 @@
     <support node="5" ux="1" uy="1" rz="0" settlement_uy="-0.002" />
     <support node="6" ux="1" uy="1" rz="0" />
   </boundary_conditions>
+  <load_cases>
+    <load_case id="LC1" name="Settlement" />
+  </load_cases>
 </model>
