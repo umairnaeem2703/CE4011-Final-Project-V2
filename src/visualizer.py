@@ -956,6 +956,50 @@ def plot_mode_shape(
     return ax.figure, ax
 
 
+def plot_modal_mode_shape(
+    model: StructuralModel,
+    results: ModalResults,
+    mode_index: int = 0,
+    scale_factor: Optional[float] = None,
+    ax: Optional[plt.Axes] = None,
+) -> tuple:
+    """Plot a mode shape, accepting either vectors or nodal displacement dictionaries."""
+    mode_shapes = getattr(results, "mode_shapes", []) or []
+    if mode_index < 0 or mode_index >= len(mode_shapes):
+        raise ValueError("mode_index is outside available mode_shapes.")
+
+    mode_shape = mode_shapes[mode_index]
+    if isinstance(mode_shape, dict):
+        if all(isinstance(key, int) for key in mode_shape):
+            max_index = max(mode_shape, default=-1)
+            vector = [mode_shape.get(index, 0.0) for index in range(max_index + 1)]
+            proxy = type("ModalResultsProxy", (), {})()
+            proxy.__dict__.update(getattr(results, "__dict__", {}))
+            proxy.mode_shapes = [vector]
+            proxy.periods = getattr(results, "periods", []) or []
+            proxy.frequencies = getattr(results, "frequencies", []) or []
+            return plot_mode_shape(model, proxy, mode_index=0, scale_factor=scale_factor, ax=ax)
+        if all(hasattr(value, "__len__") and not isinstance(value, (str, bytes)) for value in mode_shape.values()):
+            displacements = {node_id: list(values)[:3] for node_id, values in mode_shape.items()}
+            if ax is None:
+                fig, ax = plt.subplots(figsize=(9, 6))
+            else:
+                fig = ax.figure
+            plot_deformed_shape(model=model, displacements=displacements, scale_factor=scale_factor, show_undeformed=True, ax=ax)
+            periods = getattr(results, "periods", []) or []
+            frequencies = getattr(results, "frequencies", []) or []
+            parts = [f"Mode Shape {mode_index + 1}"]
+            if mode_index < len(frequencies):
+                parts.append(f"f = {frequencies[mode_index]:.3g} Hz")
+            if mode_index < len(periods):
+                parts.append(f"T = {periods[mode_index]:.3g} s")
+            ax.set_title(", ".join(parts))
+            return fig, ax
+        raise ValueError("Mode shape dictionary does not contain usable nodal or DOF data.")
+
+    return plot_mode_shape(model, results, mode_index=mode_index, scale_factor=scale_factor, ax=ax)
+
+
 def _response_component(history: list, dof: int) -> list:
     values = []
     for step in history:
