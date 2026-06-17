@@ -143,6 +143,10 @@ def _window_with_model(model=object()):
     window.latest_modal_result = None
     window.modal_analysis_error = None
     window.modal_num_modes_var = DummyVar("3")
+    window.modal_rayleigh_mode_i_var = DummyVar("1")
+    window.modal_rayleigh_zeta_i_var = DummyVar("0.05")
+    window.modal_rayleigh_mode_j_var = DummyVar("2")
+    window.modal_rayleigh_zeta_j_var = DummyVar("0.05")
     window.result_view_category = None
     window.result_view_tree = None
     window.result_viewer_notebook = None
@@ -194,12 +198,17 @@ def _window_with_model(model=object()):
     window.result_viewer_dynamic_summary_vars = {}
     window.result_viewer_dynamic_mode_var = None
     window.result_viewer_dynamic_mode_selector = None
+    window.result_viewer_dynamic_mode_normalization_var = DummyVar("Mass normalized")
+    window.result_viewer_dynamic_mode_normalization_selector = None
+    window.result_viewer_dynamic_reference_dof_var = DummyVar("1")
+    window.result_viewer_dynamic_reference_dof_selector = None
     window.result_viewer_dynamic_matrix_selector = None
     window.result_viewer_dynamic_matrix_tree = None
     window.result_viewer_dynamic_mode_info_frame = None
     window.result_viewer_dynamic_mode_info_vars = {}
     window.result_viewer_dynamic_plot_frame = None
     window.result_viewer_dynamic_plot_canvas = None
+    window.result_viewer_dynamic_phi_tree = None
     return window
 
 
@@ -325,14 +334,16 @@ def test_desktop_run_modal_analysis_stores_result_and_status(monkeypatch):
     monkeypatch.setattr(
         main_window,
         "run_modal_analysis",
-        lambda model, num_modes=3, mass_matrix_type="lumped": modal_calls.append((model, num_modes)) or SimpleNamespace(ok=True, results=expected_results, error=None),
+        lambda model, num_modes=3, mass_matrix_type="lumped", rayleigh_target_mode_i=1, rayleigh_zeta_i=0.05, rayleigh_target_mode_j=2, rayleigh_zeta_j=0.05: modal_calls.append(
+            (model, num_modes, rayleigh_target_mode_i, rayleigh_zeta_i, rayleigh_target_mode_j, rayleigh_zeta_j)
+        ) or SimpleNamespace(ok=True, results=expected_results, error=None),
     )
     window = _window_with_model()
     window.modal_num_modes_var.set("4")
 
     window._toolbar_action("Run Modal Analysis")
 
-    assert modal_calls == [(window.model_canvas.builder.model, 4)]
+    assert modal_calls == [(window.model_canvas.builder.model, 4, 1, 0.05, 2, 0.05)]
     assert window.latest_modal_results is expected_results
     assert window.latest_modal_result is expected_results
     assert window.modal_analysis_error is None
@@ -343,7 +354,7 @@ def test_desktop_run_modal_analysis_reports_mass_message(monkeypatch):
     monkeypatch.setattr(
         main_window,
         "run_modal_analysis",
-        lambda model, num_modes=3, mass_matrix_type="lumped": SimpleNamespace(ok=False, results=None, error="Add mass before running modal analysis."),
+        lambda model, num_modes=3, mass_matrix_type="lumped", rayleigh_target_mode_i=1, rayleigh_zeta_i=0.05, rayleigh_target_mode_j=2, rayleigh_zeta_j=0.05: SimpleNamespace(ok=False, results=None, error="Add mass before running modal analysis."),
     )
     window = _window_with_model()
     window.latest_static_result = object()
@@ -365,7 +376,9 @@ def test_desktop_run_modal_analysis_stops_on_backend_error(monkeypatch):
     monkeypatch.setattr(
         main_window,
         "run_modal_analysis",
-        lambda model, num_modes=3, mass_matrix_type="lumped": modal_calls.append((model, num_modes)) or SimpleNamespace(ok=True, results=object(), error=None),
+        lambda model, num_modes=3, mass_matrix_type="lumped", rayleigh_target_mode_i=1, rayleigh_zeta_i=0.05, rayleigh_target_mode_j=2, rayleigh_zeta_j=0.05: modal_calls.append(
+            (model, num_modes, rayleigh_target_mode_i, rayleigh_zeta_i, rayleigh_target_mode_j, rayleigh_zeta_j)
+        ) or SimpleNamespace(ok=True, results=object(), error=None),
     )
     window = _window_with_model()
     window.modal_num_modes_var.set("2")
@@ -374,7 +387,7 @@ def test_desktop_run_modal_analysis_stops_on_backend_error(monkeypatch):
 
     window._toolbar_action("Run Modal Analysis")
 
-    assert modal_calls == [(window.model_canvas.builder.model, 2)]
+    assert modal_calls == [(window.model_canvas.builder.model, 2, 1, 0.05, 2, 0.05)]
     assert window.latest_modal_results is not None
     assert window.modal_analysis_error is None
 
@@ -384,7 +397,9 @@ def test_desktop_modal_analysis_rejects_invalid_mode_count(monkeypatch):
     monkeypatch.setattr(
         main_window,
         "run_modal_analysis",
-        lambda model, num_modes=3, mass_matrix_type="lumped": modal_calls.append((model, num_modes)) or SimpleNamespace(ok=True, results=object(), error=None),
+        lambda model, num_modes=3, mass_matrix_type="lumped", rayleigh_target_mode_i=1, rayleigh_zeta_i=0.05, rayleigh_target_mode_j=2, rayleigh_zeta_j=0.05: modal_calls.append(
+            (model, num_modes, rayleigh_target_mode_i, rayleigh_zeta_i, rayleigh_target_mode_j, rayleigh_zeta_j)
+        ) or SimpleNamespace(ok=True, results=object(), error=None),
     )
     window = _window_with_model()
     window.modal_num_modes_var.set("0")
@@ -418,6 +433,7 @@ def test_desktop_modal_results_builds_tabbed_layout(monkeypatch):
     assert window.result_viewer_dynamic_summary_tree.rows == [("Run Modal Analysis first.",)]
     assert window.result_viewer_dynamic_mode_selector.configured["state"] == "disabled"
     assert window.result_viewer_dynamic_matrix_selector.configured["state"] == "disabled"
+    assert window.result_viewer_dynamic_reference_dof_selector.configured["state"] == "disabled"
 
 
 def test_desktop_modal_summary_shows_one_row_per_mode():
@@ -432,12 +448,19 @@ def test_desktop_modal_summary_shows_one_row_per_mode():
         participation_factors=[0.9, 0.1],
         effective_masses=[0.7, 0.2],
         mass_participation_ratios=[0.7, 0.9],
+        modal_damping_ratios=[0.05, 0.04],
+        rayleigh_alpha=0.5959,
+        rayleigh_beta=0.003557,
+        rayleigh_target_modes=(1, 2),
+        rayleigh_target_damping_ratios=(0.05, 0.05),
     )
     window.result_viewer_dynamic_summary_tree = DummyTreeview()
     window.result_viewer_dynamic_mode_selector = DummyCombobox()
+    window.result_viewer_dynamic_mode_normalization_selector = DummyCombobox()
+    window.result_viewer_dynamic_reference_dof_selector = DummyCombobox()
     window.result_viewer_dynamic_matrix_selector = DummyCombobox()
     window.result_viewer_dynamic_mode_var = DummyVar("1")
-    window.result_viewer_dynamic_category = DummyVar("K")
+    window.result_viewer_dynamic_category = DummyVar("Kff")
     window.result_viewer_dynamic_message = DummyVar("-")
 
     window._refresh_modal_summary()
@@ -452,12 +475,15 @@ def test_desktop_modal_summary_shows_one_row_per_mode():
         "Participation Factor",
         "Effective Modal Mass",
         "Mass Participation Ratio",
+        "Modal Damping Ratio",
     )
     assert len(window.result_viewer_dynamic_summary_tree.rows) == 2
-    assert window.result_viewer_dynamic_summary_tree.rows[0] == ("1", "4", "2", "1", "1", "0.8", "0.9", "0.7", "70%")
-    assert window.result_viewer_dynamic_summary_tree.rows[1] == ("2", "9", "3", "2", "0.5", "0.2", "0.1", "0.2", "90%")
+    assert window.result_viewer_dynamic_summary_tree.rows[0] == ("1", "4", "2", "1", "1", "0.8", "0.9", "0.7", "70%", "5%")
+    assert window.result_viewer_dynamic_summary_tree.rows[1] == ("2", "9", "3", "2", "0.5", "0.2", "0.1", "0.2", "90%", "4%")
     assert window.result_viewer_dynamic_mode_selector.configured["values"] == ("1", "2")
-    assert window.result_viewer_dynamic_message.get() == "Modal results ready."
+    assert "Modal results ready." in window.result_viewer_dynamic_message.get()
+    assert "alpha = 0.596" in window.result_viewer_dynamic_message.get()
+    assert "beta = 0.004" in window.result_viewer_dynamic_message.get()
 
 
 def test_desktop_modal_summary_handles_missing_optional_fields():
@@ -469,14 +495,16 @@ def test_desktop_modal_summary_handles_missing_optional_fields():
     )
     window.result_viewer_dynamic_summary_tree = DummyTreeview()
     window.result_viewer_dynamic_mode_selector = DummyCombobox()
+    window.result_viewer_dynamic_mode_normalization_selector = DummyCombobox()
+    window.result_viewer_dynamic_reference_dof_selector = DummyCombobox()
     window.result_viewer_dynamic_matrix_selector = DummyCombobox()
     window.result_viewer_dynamic_mode_var = DummyVar("1")
-    window.result_viewer_dynamic_category = DummyVar("K")
+    window.result_viewer_dynamic_category = DummyVar("Kff")
     window.result_viewer_dynamic_message = DummyVar("-")
 
     window._refresh_modal_summary()
 
-    assert window.result_viewer_dynamic_summary_tree.rows == [("1", "—", "—", "3", "—", "—", "—", "—", "—")]
+    assert window.result_viewer_dynamic_summary_tree.rows == [("1", "—", "—", "3", "—", "—", "—", "—", "—", "—")]
     assert window.result_viewer_dynamic_mode_selector.configured["values"] == ("1",)
     assert window.result_viewer_dynamic_message.get() == "Modal results ready."
 
@@ -495,6 +523,10 @@ def test_desktop_modal_mode_shape_view_renders_selected_mode(monkeypatch):
         num_modes_extracted=2,
     )
     window.result_viewer_dynamic_mode_var = DummyVar("2")
+    window.result_viewer_dynamic_mode_normalization_var = DummyVar("Specific DOF normalized")
+    window.result_viewer_dynamic_reference_dof_var = DummyVar("2")
+    window.result_viewer_dynamic_mode_normalization_selector = DummyCombobox()
+    window.result_viewer_dynamic_reference_dof_selector = DummyCombobox()
     window.result_viewer_dynamic_mode_info_vars = {
         "Mode": DummyVar("—"),
         "Eigenvalue (ω²)": DummyVar("—"),
@@ -504,8 +536,10 @@ def test_desktop_modal_mode_shape_view_renders_selected_mode(monkeypatch):
         "Participation Factor": DummyVar("—"),
         "Effective Mass": DummyVar("—"),
         "Participation Ratio": DummyVar("—"),
+        "Modal Damping Ratio": DummyVar("—"),
     }
     window.result_viewer_dynamic_plot_frame = DummyFrame()
+    window.result_viewer_dynamic_phi_tree = DummyTreeview()
     window.result_viewer_dynamic_plot_canvas = None
     calls = []
 
@@ -521,23 +555,30 @@ def test_desktop_modal_mode_shape_view_renders_selected_mode(monkeypatch):
             calls.append(("draw", None))
 
     monkeypatch.setattr(main_window, "FigureCanvasTkAgg", DummyCanvas)
-    monkeypatch.setattr(main_window, "plot_modal_mode_shape", lambda model, results, mode_index=0, scale_factor=None, ax=None: calls.append(("mode", mode_index)) or (SimpleNamespace(), None))
+    monkeypatch.setattr(
+        main_window,
+        "plot_modal_mode_shape",
+        lambda model, results, mode_index=0, scale_factor=None, ax=None: calls.append(("shape", results.mode_shapes[mode_index])) or (SimpleNamespace(), None),
+    )
 
     window._refresh_modal_mode_shape_view()
 
-    assert ("mode", 1) in calls
+    assert ("shape", [0.0, 1.0, 0.0]) in calls
     assert ("canvas", window.result_viewer_dynamic_plot_frame) in calls
     assert window.result_viewer_dynamic_mode_info_vars["Mode"].get() == "2"
     assert window.result_viewer_dynamic_mode_info_vars["Eigenvalue (ω²)"].get() == "9"
     assert window.result_viewer_dynamic_mode_info_vars["Frequency"].get() == "4"
     assert window.result_viewer_dynamic_mode_info_vars["Effective Mass"].get() == "0.2"
     assert window.result_viewer_dynamic_mode_info_vars["Participation Ratio"].get() == "90%"
+    assert window.result_viewer_dynamic_phi_tree.rows == [("DOF1", "0"), ("DOF2", "1"), ("DOF3", "0")]
 
 
 def test_desktop_modal_mode_shape_view_reports_missing_shapes(monkeypatch):
     window = _window_with_model()
     window.latest_modal_result = SimpleNamespace(mode_shapes=[], num_modes_extracted=0)
     window.result_viewer_dynamic_mode_var = DummyVar("1")
+    window.result_viewer_dynamic_mode_normalization_selector = DummyCombobox()
+    window.result_viewer_dynamic_reference_dof_selector = DummyCombobox()
     window.result_viewer_dynamic_mode_info_vars = {
         "Mode": DummyVar("—"),
         "Eigenvalue (ω²)": DummyVar("—"),
@@ -547,8 +588,10 @@ def test_desktop_modal_mode_shape_view_reports_missing_shapes(monkeypatch):
         "Participation Factor": DummyVar("—"),
         "Effective Mass": DummyVar("—"),
         "Participation Ratio": DummyVar("—"),
+        "Modal Damping Ratio": DummyVar("—"),
     }
     window.result_viewer_dynamic_plot_frame = DummyFrame()
+    window.result_viewer_dynamic_phi_tree = DummyTreeview()
     labels = []
     monkeypatch.setattr(main_window.ttk, "Label", lambda *args, **kwargs: SimpleNamespace(grid=lambda **_kw: labels.append(kwargs.get("text"))))
 
@@ -561,6 +604,8 @@ def test_desktop_modal_mode_shape_view_rejects_invalid_index(monkeypatch):
     window = _window_with_model()
     window.latest_modal_result = SimpleNamespace(mode_shapes=[[0.0, 0.2, 0.0]], periods=[0.5], frequencies=[2.0], num_modes_extracted=1)
     window.result_viewer_dynamic_mode_var = DummyVar("9")
+    window.result_viewer_dynamic_mode_normalization_selector = DummyCombobox()
+    window.result_viewer_dynamic_reference_dof_selector = DummyCombobox()
     window.result_viewer_dynamic_mode_info_vars = {
         "Mode": DummyVar("—"),
         "Eigenvalue (ω²)": DummyVar("—"),
@@ -570,14 +615,43 @@ def test_desktop_modal_mode_shape_view_rejects_invalid_index(monkeypatch):
         "Participation Factor": DummyVar("—"),
         "Effective Mass": DummyVar("—"),
         "Participation Ratio": DummyVar("—"),
+        "Modal Damping Ratio": DummyVar("—"),
     }
     window.result_viewer_dynamic_plot_frame = DummyFrame()
+    window.result_viewer_dynamic_phi_tree = DummyTreeview()
     labels = []
     monkeypatch.setattr(main_window.ttk, "Label", lambda *args, **kwargs: SimpleNamespace(grid=lambda **_kw: labels.append(kwargs.get("text"))))
 
     window._refresh_modal_mode_shape_view()
 
     assert "Invalid mode index." in labels
+
+
+def test_desktop_modal_mode_shape_magnitude_normalization_sets_unit_peak():
+    window = _window_with_model()
+
+    normalized, message = window._normalize_modal_mode_shape([0.25, -2.0, 0.5], "Magnitude normalized", None)
+
+    assert message is None
+    assert max(abs(value) for value in normalized) == 1.0
+
+
+def test_desktop_modal_mode_shape_specific_dof_normalization_sets_selected_dof_to_one():
+    window = _window_with_model()
+
+    normalized, message = window._normalize_modal_mode_shape([0.5, -2.0, 1.0], "Specific DOF normalized", 2)
+
+    assert message is None
+    assert normalized[1] == 1.0
+
+
+def test_desktop_modal_mode_shape_specific_dof_zero_value_reports_clear_message():
+    window = _window_with_model()
+
+    normalized, message = window._normalize_modal_mode_shape([0.0, 1.0, 2.0], "Specific DOF normalized", 1)
+
+    assert normalized is None
+    assert message == "Cannot normalize by DOF1 because its phi value is zero."
 
 
 def test_desktop_modal_results_empty_state_uses_singular_cache():
@@ -595,44 +669,28 @@ def test_desktop_modal_results_empty_state_uses_singular_cache():
 def test_desktop_modal_matrix_selector_exposes_optional_damping_matrices():
     window = _window_with_model()
     window.latest_modal_result = SimpleNamespace(
-        K=[[10.0, 0.0], [0.0, 5.0]],
-        M=[[2.0, 0.0], [0.0, 1.0]],
-        dynamic_assembly=SimpleNamespace(
-            Kff=[[5.0]],
-            Mff=[[1.5]],
-            C=[[0.5]],
-            Cff=[[0.25]],
-            dof_map={1: [0, 1, 2]},
-        ),
+        Kff=[[10.0, 0.0], [0.0, 5.0]],
+        Mff=[[2.0, 0.0], [0.0, 1.0]],
+        Cff=[[0.5, 0.0], [0.0, 0.25]],
     )
     window.latest_static_result = None
 
-    assert window._modal_result_categories() == ["K", "Kff", "M", "Mff", "C", "Cff"]
-
-    window.result_viewer_dynamic_category = DummyVar("K")
-    columns, rows = window._modal_result_rows()
-    assert columns == ("DOF", "N1 UX", "N1 UY")
-    assert rows == [("N1 UX", "10", "0"), ("N1 UY", "0", "5")]
+    assert window._modal_result_categories() == ["Kff", "Mff", "Cff"]
 
     window.result_viewer_dynamic_category = DummyVar("Kff")
     columns, rows = window._modal_result_rows()
-    assert columns == ("DOF", "N1 UX")
-    assert rows == [("N1 UX", "5")]
+    assert columns == ("DOF", "DOF1", "DOF2")
+    assert rows == [("DOF1", "10", "0"), ("DOF2", "0", "5")]
 
     window.result_viewer_dynamic_category = DummyVar("Mff")
     columns, rows = window._modal_result_rows()
-    assert columns == ("DOF", "N1 UX")
-    assert rows == [("N1 UX", "1.5")]
-
-    window.result_viewer_dynamic_category = DummyVar("C")
-    columns, rows = window._modal_result_rows()
-    assert columns == ("DOF", "N1 UX")
-    assert rows == [("N1 UX", "0.5")]
+    assert columns == ("DOF", "DOF1", "DOF2")
+    assert rows == [("DOF1", "2", "0"), ("DOF2", "0", "1")]
 
     window.result_viewer_dynamic_category = DummyVar("Cff")
     columns, rows = window._modal_result_rows()
-    assert columns == ("DOF", "N1 UX")
-    assert rows == [("N1 UX", "0.25")]
+    assert columns == ("DOF", "DOF1", "DOF2")
+    assert rows == [("DOF1", "0.5", "0"), ("DOF2", "0", "0.25")]
 
 
 def test_desktop_modal_matrix_tab_falls_back_to_indices_without_dof_labels():
@@ -642,29 +700,29 @@ def test_desktop_modal_matrix_tab_falls_back_to_indices_without_dof_labels():
         num_modes_extracted=1,
     )
     window.latest_static_result = None
-    window.result_viewer_dynamic_category = DummyVar("K")
+    window.result_viewer_dynamic_category = DummyVar("Kff")
 
     columns, rows = window._modal_result_rows()
 
-    assert columns == ("Row", "C1", "C2")
-    assert rows == [("R1", "1", "2"), ("R2", "3", "4")]
+    assert columns == ("DOF", "DOF1", "DOF2")
+    assert rows == [("DOF1", "1", "2"), ("DOF2", "3", "4")]
 
 
 def test_desktop_modal_matrix_tab_uses_modal_result_without_static_result():
     window = _window_with_model()
     window.latest_modal_result = SimpleNamespace(
-        K=[[1.0]],
-        M=[[2.0]],
+        Kff=[[1.0]],
+        Mff=[[2.0]],
         dynamic_assembly=SimpleNamespace(dof_map={1: [0]}),
         num_modes_extracted=1,
     )
     window.latest_static_result = None
     window.result_viewer_dynamic_tree = DummyTreeview()
-    window.result_viewer_dynamic_category = DummyVar("M")
+    window.result_viewer_dynamic_category = DummyVar("Mff")
 
     window._refresh_modal_matrix_table()
 
-    assert window.result_viewer_dynamic_tree.rows == [("N1 UX", "2")]
+    assert window.result_viewer_dynamic_tree.rows == [("DOF1", "2")]
 
 
 def test_desktop_static_results_empty_state_uses_singular_cache():

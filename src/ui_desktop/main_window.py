@@ -114,6 +114,10 @@ class MainWindow:
         self.grid_spacing = tk.StringVar(value="1.0")
         self.status_message = tk.StringVar(value="Select / Inspect: click a node or member to inspect it.")
         self.modal_num_modes_var = tk.StringVar(value="3")
+        self.modal_rayleigh_mode_i_var = tk.StringVar(value="1")
+        self.modal_rayleigh_zeta_i_var = tk.StringVar(value="0.05")
+        self.modal_rayleigh_mode_j_var = tk.StringVar(value="2")
+        self.modal_rayleigh_zeta_j_var = tk.StringVar(value="0.05")
         self.latest_static_results = None
         self.latest_static_result = None
         self.static_analysis_error = None
@@ -140,12 +144,17 @@ class MainWindow:
         self.result_viewer_dynamic_summary_tree = None
         self.result_viewer_dynamic_mode_var = None
         self.result_viewer_dynamic_mode_selector = None
+        self.result_viewer_dynamic_mode_normalization_var = None
+        self.result_viewer_dynamic_mode_normalization_selector = None
+        self.result_viewer_dynamic_reference_dof_var = None
+        self.result_viewer_dynamic_reference_dof_selector = None
         self.result_viewer_dynamic_matrix_selector = None
         self.result_viewer_dynamic_matrix_tree = None
         self.result_viewer_dynamic_mode_info_frame = None
         self.result_viewer_dynamic_mode_info_vars = {}
         self.result_viewer_dynamic_plot_frame = None
         self.result_viewer_dynamic_plot_canvas = None
+        self.result_viewer_dynamic_phi_tree = None
         self.result_viewer_plot_notebook = None
         self.result_viewer_plot_frames = {}
         self.result_viewer_plot_canvases = {}
@@ -256,6 +265,16 @@ class MainWindow:
         ttk.Label(controls, text="Number of Modes").grid(row=0, column=0, sticky="w")
         spin = ttk.Spinbox(controls, from_=1, to=20, width=6, textvariable=self.modal_num_modes_var)
         spin.grid(row=0, column=1, padx=(8, 0), sticky="w")
+        damping_controls = ttk.LabelFrame(controls, text="Rayleigh Damping", padding=(8, 6))
+        damping_controls.grid(row=1, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        ttk.Label(damping_controls, text="Mode i").grid(row=0, column=0, sticky="w")
+        ttk.Entry(damping_controls, width=6, textvariable=self.modal_rayleigh_mode_i_var).grid(row=0, column=1, padx=(6, 12), sticky="w")
+        ttk.Label(damping_controls, text="ζi").grid(row=0, column=2, sticky="w")
+        ttk.Entry(damping_controls, width=8, textvariable=self.modal_rayleigh_zeta_i_var).grid(row=0, column=3, padx=(6, 12), sticky="w")
+        ttk.Label(damping_controls, text="Mode j").grid(row=0, column=4, sticky="w")
+        ttk.Entry(damping_controls, width=6, textvariable=self.modal_rayleigh_mode_j_var).grid(row=0, column=5, padx=(6, 12), sticky="w")
+        ttk.Label(damping_controls, text="ζj").grid(row=0, column=6, sticky="w")
+        ttk.Entry(damping_controls, width=8, textvariable=self.modal_rayleigh_zeta_j_var).grid(row=0, column=7, padx=(6, 0), sticky="w")
         ttk.Label(
             controls,
             text="Modal analysis uses the current stiffness and mass model. Static analysis is not required.",
@@ -413,7 +432,34 @@ class MainWindow:
             self._write_status(self.modal_analysis_error)
             return
 
-        result = run_modal_analysis(self.model_canvas.builder.model, num_modes=requested_modes)
+        try:
+            target_mode_i = int(self._modal_var_value("modal_rayleigh_mode_i_var", "1"))
+            target_mode_j = int(self._modal_var_value("modal_rayleigh_mode_j_var", "2"))
+        except ValueError:
+            self.latest_modal_results = None
+            self.latest_modal_result = None
+            self.modal_analysis_error = "Rayleigh target modes must be integers."
+            self._write_status(self.modal_analysis_error)
+            return
+
+        try:
+            zeta_i = float(self._modal_var_value("modal_rayleigh_zeta_i_var", "0.05"))
+            zeta_j = float(self._modal_var_value("modal_rayleigh_zeta_j_var", "0.05"))
+        except ValueError:
+            self.latest_modal_results = None
+            self.latest_modal_result = None
+            self.modal_analysis_error = "Rayleigh damping ratios must be numeric."
+            self._write_status(self.modal_analysis_error)
+            return
+
+        result = run_modal_analysis(
+            self.model_canvas.builder.model,
+            num_modes=requested_modes,
+            rayleigh_target_mode_i=target_mode_i,
+            rayleigh_zeta_i=zeta_i,
+            rayleigh_target_mode_j=target_mode_j,
+            rayleigh_zeta_j=zeta_j,
+        )
         if not result.ok:
             message = self._modal_error_message(result.error)
             self.latest_modal_results = None
@@ -438,6 +484,14 @@ class MainWindow:
             )
         else:
             self._write_status(f"Modal analysis complete: {mode_count} mode(s) extracted.")
+
+    def _modal_var_value(self, attribute_name: str, default: str) -> str:
+        var = getattr(self, attribute_name, None)
+        if var is not None and hasattr(var, "get"):
+            value = var.get()
+            if value not in (None, ""):
+                return str(value)
+        return default
 
     def _modal_error_message(self, error: str | None) -> str:
         if not error:
@@ -687,7 +741,7 @@ class MainWindow:
 
         self.result_viewer_dynamic_top_controls = ttk.Frame(parent)
         self.result_viewer_dynamic_top_controls.grid(row=0, column=0, sticky="ew", pady=(0, 6))
-        self.result_viewer_dynamic_top_controls.columnconfigure(1, weight=1)
+        self.result_viewer_dynamic_top_controls.columnconfigure(3, weight=1)
         ttk.Label(self.result_viewer_dynamic_top_controls, text="Dynamic Results: Modal").grid(row=0, column=0, sticky="w")
 
         mode_controls = ttk.Frame(self.result_viewer_dynamic_top_controls)
@@ -703,7 +757,32 @@ class MainWindow:
         )
         self.result_viewer_dynamic_mode_selector.grid(row=0, column=1, padx=(8, 0), sticky="w")
         self.result_viewer_dynamic_mode_selector.bind("<<ComboboxSelected>>", lambda _event: self._refresh_modal_mode_shape_view())
-        ttk.Button(self.result_viewer_dynamic_top_controls, text="Refresh Viewer", command=self._refresh_results_viewer).grid(row=0, column=2, sticky="e")
+
+        normalization_controls = ttk.Frame(self.result_viewer_dynamic_top_controls)
+        normalization_controls.grid(row=0, column=2, sticky="w", padx=(12, 0))
+        ttk.Label(normalization_controls, text="Display").grid(row=0, column=0, sticky="w")
+        self.result_viewer_dynamic_mode_normalization_var = tk.StringVar(value="Mass normalized")
+        self.result_viewer_dynamic_mode_normalization_selector = ttk.Combobox(
+            normalization_controls,
+            textvariable=self.result_viewer_dynamic_mode_normalization_var,
+            values=("Mass normalized", "Magnitude normalized", "Specific DOF normalized"),
+            state="readonly",
+            width=22,
+        )
+        self.result_viewer_dynamic_mode_normalization_selector.grid(row=0, column=1, padx=(8, 12), sticky="w")
+        self.result_viewer_dynamic_mode_normalization_selector.bind("<<ComboboxSelected>>", lambda _event: self._refresh_modal_mode_shape_view())
+        ttk.Label(normalization_controls, text="Reference DOF").grid(row=0, column=2, sticky="w")
+        self.result_viewer_dynamic_reference_dof_var = tk.StringVar(value="1")
+        self.result_viewer_dynamic_reference_dof_selector = ttk.Combobox(
+            normalization_controls,
+            textvariable=self.result_viewer_dynamic_reference_dof_var,
+            values=(),
+            state="disabled",
+            width=10,
+        )
+        self.result_viewer_dynamic_reference_dof_selector.grid(row=0, column=3, padx=(8, 0), sticky="w")
+        self.result_viewer_dynamic_reference_dof_selector.bind("<<ComboboxSelected>>", lambda _event: self._refresh_modal_mode_shape_view())
+        ttk.Button(self.result_viewer_dynamic_top_controls, text="Refresh Viewer", command=self._refresh_results_viewer).grid(row=0, column=3, sticky="e")
 
         notebook = ttk.Notebook(parent)
         notebook.grid(row=1, column=0, sticky="nsew")
@@ -762,28 +841,46 @@ class MainWindow:
             "Participation Factor": tk.StringVar(value="—"),
             "Effective Mass": tk.StringVar(value="—"),
             "Participation Ratio": tk.StringVar(value="—"),
+            "Modal Damping Ratio": tk.StringVar(value="—"),
         }
         for row, (label, value_var) in enumerate(self.result_viewer_dynamic_mode_info_vars.items()):
             ttk.Label(info, text=label).grid(row=row, column=0, sticky="w", pady=2)
             ttk.Label(info, textvariable=value_var, wraplength=280, justify="left").grid(row=row, column=1, sticky="ew", pady=2)
 
-        plot_frame = ttk.Frame(parent)
-        plot_frame.grid(row=1, column=0, sticky="nsew")
+        content = ttk.Frame(parent)
+        content.grid(row=1, column=0, sticky="nsew")
+        content.columnconfigure(0, weight=1)
+        content.columnconfigure(1, weight=0)
+        content.rowconfigure(0, weight=1)
+
+        plot_frame = ttk.Frame(content)
+        plot_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         plot_frame.columnconfigure(0, weight=1)
         plot_frame.rowconfigure(0, weight=1)
         self.result_viewer_dynamic_plot_frame = plot_frame
         self.result_viewer_dynamic_plot_canvas = None
 
+        phi_frame = ttk.LabelFrame(content, text="Phi Values", padding=6)
+        phi_frame.grid(row=0, column=1, sticky="ns")
+        phi_frame.columnconfigure(0, weight=1)
+        phi_frame.rowconfigure(0, weight=1)
+        phi_tree = ttk.Treeview(phi_frame, show="headings")
+        phi_scroll = ttk.Scrollbar(phi_frame, orient=tk.VERTICAL, command=phi_tree.yview)
+        phi_tree.configure(yscrollcommand=phi_scroll.set)
+        phi_tree.grid(row=0, column=0, sticky="nsew")
+        phi_scroll.grid(row=0, column=1, sticky="ns")
+        self.result_viewer_dynamic_phi_tree = phi_tree
+
     def _build_modal_matrices_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(1, weight=1)
+        parent.rowconfigure(2, weight=1)
 
         controls = ttk.Frame(parent)
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         controls.columnconfigure(1, weight=1)
         ttk.Label(controls, text="Matrix").grid(row=0, column=0, sticky="w")
         initial_matrix_values = tuple(self._modal_result_categories())
-        self.result_viewer_dynamic_category = tk.StringVar(value=initial_matrix_values[0] if initial_matrix_values else "K")
+        self.result_viewer_dynamic_category = tk.StringVar(value=initial_matrix_values[0] if initial_matrix_values else "Kff")
         self.result_viewer_dynamic_matrix_selector = ttk.Combobox(
             controls,
             textvariable=self.result_viewer_dynamic_category,
@@ -793,9 +890,15 @@ class MainWindow:
         )
         self.result_viewer_dynamic_matrix_selector.grid(row=0, column=1, sticky="w", padx=(8, 0))
         self.result_viewer_dynamic_matrix_selector.bind("<<ComboboxSelected>>", lambda _event: self._refresh_modal_matrix_table())
+        ttk.Label(
+            parent,
+            text="Kff, Mff, and Cff are the reduced/condensed dynamic matrices used for modal analysis.",
+            wraplength=760,
+            justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(0, 6))
 
         frame = ttk.Frame(parent)
-        frame.grid(row=1, column=0, sticky="nsew")
+        frame.grid(row=2, column=0, sticky="nsew")
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
         tree = ttk.Treeview(frame, show="headings")
@@ -958,6 +1061,7 @@ class MainWindow:
             "Participation Factor",
             "Effective Modal Mass",
             "Mass Participation Ratio",
+            "Modal Damping Ratio",
         )
         rows = [self._modal_summary_row(results, index) for index in range(mode_count)]
         return columns, rows
@@ -978,6 +1082,7 @@ class MainWindow:
             "effective_modal_masses",
             "mass_participation_ratios",
             "mass_participation_ratio",
+            "modal_damping_ratios",
         ):
             values = getattr(results, attribute_name, None)
             if isinstance(values, (list, tuple)) and values:
@@ -1039,6 +1144,7 @@ class MainWindow:
             self._modal_format_value(self._modal_sequence_value(results, ("participation_factors",), index)),
             self._modal_format_value(self._modal_sequence_value(results, ("effective_masses", "effective_modal_masses", "effective_mass"), index)),
             self._modal_format_value(self._modal_sequence_value(results, ("mass_participation_ratios", "mass_participation_ratio"), index), as_percent=True),
+            self._modal_format_value(self._modal_sequence_value(results, ("modal_damping_ratios",), index), as_percent=True),
         )
 
     def _modal_mode_info_values(self, results: object, index: int) -> dict[str, str]:
@@ -1052,7 +1158,49 @@ class MainWindow:
             "Participation Factor": row[6],
             "Effective Mass": row[7],
             "Participation Ratio": row[8],
+            "Modal Damping Ratio": row[9],
         }
+
+    def _modal_scalar_value(self, results: object, attribute_names: tuple[str, ...]) -> object | None:
+        for attribute_name in attribute_names:
+            value = getattr(results, attribute_name, None)
+            if value is not None:
+                return value
+        return None
+
+    def _modal_global_damping_message(self, results: object) -> str:
+        alpha = self._modal_scalar_value(results, ("rayleigh_alpha",))
+        beta = self._modal_scalar_value(results, ("rayleigh_beta",))
+        target_modes = self._modal_scalar_value(results, ("rayleigh_target_modes",))
+        if target_modes is None:
+            mode_i = self._modal_scalar_value(results, ("rayleigh_target_mode_i",))
+            mode_j = self._modal_scalar_value(results, ("rayleigh_target_mode_j",))
+            if mode_i is not None and mode_j is not None:
+                target_modes = (mode_i, mode_j)
+        target_zetas = self._modal_scalar_value(results, ("rayleigh_target_damping_ratios",))
+        if target_zetas is None:
+            zeta_i = self._modal_scalar_value(results, ("rayleigh_zeta_i",))
+            zeta_j = self._modal_scalar_value(results, ("rayleigh_zeta_j",))
+            if zeta_i is not None and zeta_j is not None:
+                target_zetas = (zeta_i, zeta_j)
+
+        if alpha is None and beta is None and target_modes is None and target_zetas is None:
+            return ""
+
+        mode_text = "—"
+        if isinstance(target_modes, (list, tuple)) and len(target_modes) >= 2:
+            mode_text = f"mode {target_modes[0]} and mode {target_modes[1]}"
+        zeta_text = "—"
+        if isinstance(target_zetas, (list, tuple)) and len(target_zetas) >= 2:
+            zeta_text = f"{self._modal_format_value(target_zetas[0], as_percent=True)} / {self._modal_format_value(target_zetas[1], as_percent=True)}"
+
+        return (
+            "Rayleigh damping: "
+            f"alpha = {self._modal_format_value(alpha)}, "
+            f"beta = {self._modal_format_value(beta)}, "
+            f"targets = {mode_text}, "
+            f"zetas = {zeta_text}."
+        )
 
     def _modal_result_containers(self, result: object) -> list[object]:
         containers = [result]
@@ -1070,10 +1218,16 @@ class MainWindow:
         return getattr(container, key, None)
 
     def _get_modal_matrix(self, result: object, key: str) -> object | None:
+        aliases = {
+            "Kff": ("Kff", "K"),
+            "Mff": ("Mff", "M"),
+            "Cff": ("Cff", "C"),
+        }
         for container in self._modal_result_containers(result):
-            value = self._modal_container_value(container, key)
-            if value is not None:
-                return value
+            for alias in aliases.get(key, (key,)):
+                value = self._modal_container_value(container, alias)
+                if value is not None:
+                    return value
         return None
 
     def _get_modal_dof_map(self, result: object) -> object | None:
@@ -1083,31 +1237,16 @@ class MainWindow:
                 return value
         return None
 
-    def _modal_matrix_dof_labels(self, result: object) -> tuple[str, ...]:
-        return dof_equation_labels(self._get_modal_dof_map(result))
-
-    def _modal_matrix_table_data(self, matrix: object, dof_labels: tuple[str, ...]) -> tuple[tuple[str, ...], list[tuple[str, ...]]] | tuple[None, None]:
+    def _modal_matrix_table_data(self, matrix: object) -> tuple[tuple[str, ...], list[tuple[str, ...]]] | tuple[None, None]:
         rows = format_matrix(matrix, tolerance=self._display_tolerance())
         if not rows:
             return (None, None)
 
         width = max(len(row) for row in rows)
         padded_rows = [row + tuple("-" for _ in range(width - len(row))) for row in rows]
-
-        if dof_labels:
-            columns = ("DOF",) + tuple(dof_labels[index] if index < len(dof_labels) else f"Eq {index + 1}" for index in range(width))
-            table_rows = [
-                (
-                    dof_labels[index] if index < len(dof_labels) else f"Eq {index + 1}",
-                    *padded_rows[index],
-                )
-                for index in range(len(padded_rows))
-            ]
-            return columns, table_rows
-
-        columns = ("Row",) + tuple(f"C{index + 1}" for index in range(width))
+        columns = ("DOF",) + tuple(f"DOF{index + 1}" for index in range(width))
         table_rows = [
-            (f"R{index + 1}", *padded_rows[index])
+            (f"DOF{index + 1}", *padded_rows[index])
             for index in range(len(padded_rows))
         ]
         return columns, table_rows
@@ -1123,8 +1262,7 @@ class MainWindow:
         matrix = self._get_modal_matrix(results, category)
         if matrix is None or not matrix:
             return (("Message",), [("Selected modal matrix is not available in this result.",)])
-        labels = self._modal_matrix_dof_labels(results)
-        columns, rows = self._modal_matrix_table_data(matrix, labels)
+        columns, rows = self._modal_matrix_table_data(matrix)
         if columns is None or rows is None:
             return (("Message",), [("Selected modal matrix is not available in this result.",)])
         return columns, rows
@@ -1134,7 +1272,7 @@ class MainWindow:
         if results is None:
             return []
         categories = []
-        for key in ("K", "Kff", "M", "Mff", "C", "Cff"):
+        for key in ("Kff", "Mff", "Cff"):
             if self._get_modal_matrix(results, key) is not None:
                 categories.append(key)
         return categories
@@ -1143,9 +1281,9 @@ class MainWindow:
         var = getattr(self, "result_viewer_dynamic_category", None)
         if var is None:
             available = self._modal_result_categories()
-            return available[0] if available else "K"
+            return available[0] if available else "Kff"
         value = var.get() if hasattr(var, "get") else str(var)
-        return value or "K"
+        return value or "Kff"
 
     def _render_result_table(
         self,
@@ -1939,9 +2077,10 @@ class MainWindow:
                 mode_var.set("1")
             matrix_var = getattr(self, "result_viewer_dynamic_category", None)
             if matrix_var is not None:
-                matrix_var.set(matrix_values[0] if matrix_values else "K")
+                matrix_var.set(matrix_values[0] if matrix_values else "Kff")
             if message_var is not None:
                 message_var.set("Run Modal Analysis first.")
+            self._refresh_modal_mode_shape_controls()
             return
 
         columns, rows = self._modal_summary_table_data()
@@ -1971,10 +2110,14 @@ class MainWindow:
         if matrix_var is not None:
             current_matrix = matrix_var.get() if hasattr(matrix_var, "get") else str(matrix_var)
             if current_matrix not in matrix_values:
-                matrix_var.set(matrix_values[0] if matrix_values else "K")
+                matrix_var.set(matrix_values[0] if matrix_values else "Kff")
+
+        self._refresh_modal_mode_shape_controls()
 
         if message_var is not None:
-            message_var.set("Modal results ready." if mode_values else "No modal modes available.")
+            message = "Modal results ready." if mode_values else "No modal modes available."
+            damping_message = self._modal_global_damping_message(results)
+            message_var.set(f"{message} {damping_message}" if damping_message else message)
 
     def _static_result_table_data(self, category: str) -> tuple[tuple[str, ...], list[tuple[str, ...]]]:
         results = self._current_static_results()
@@ -2045,35 +2188,167 @@ class MainWindow:
             return None
         return mode_index
 
+    def _current_modal_mode_normalization(self) -> str:
+        var = getattr(self, "result_viewer_dynamic_mode_normalization_var", None)
+        if var is None or not hasattr(var, "get"):
+            return "Mass normalized"
+        value = var.get()
+        return value or "Mass normalized"
+
+    def _current_modal_reference_dof(self) -> int | None:
+        var = getattr(self, "result_viewer_dynamic_reference_dof_var", None)
+        if var is None or not hasattr(var, "get"):
+            return 1
+        value = var.get()
+        if value in (None, ""):
+            return 1
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _modal_mode_shape_vector(self, mode_shape: object) -> list[float] | None:
+        if isinstance(mode_shape, Mapping):
+            if not mode_shape or not all(isinstance(key, int) for key in mode_shape):
+                return None
+            max_index = max(mode_shape, default=-1)
+            return [float(mode_shape.get(index, 0.0)) for index in range(max_index + 1)]
+        if isinstance(mode_shape, (list, tuple)):
+            values = []
+            for value in mode_shape:
+                try:
+                    values.append(float(value))
+                except (TypeError, ValueError):
+                    return None
+            return values
+        return None
+
+    def _normalize_modal_mode_shape(
+        self,
+        mode_shape: object,
+        normalization: str,
+        reference_dof: int | None,
+    ) -> tuple[list[float] | None, str | None]:
+        vector = self._modal_mode_shape_vector(mode_shape)
+        if vector is None:
+            return None, "Phi values are unavailable for this mode shape format."
+        if normalization == "Magnitude normalized":
+            magnitude = max((abs(value) for value in vector), default=0.0)
+            if magnitude <= self._display_tolerance():
+                return vector[:], None
+            return [value / magnitude for value in vector], None
+        if normalization == "Specific DOF normalized":
+            if reference_dof is None:
+                return None, "Reference DOF must be an integer."
+            if reference_dof < 1 or reference_dof > len(vector):
+                return None, f"Reference DOF must be between 1 and {len(vector)}."
+            reference_value = vector[reference_dof - 1]
+            if abs(reference_value) <= self._display_tolerance():
+                return None, f"Cannot normalize by DOF{reference_dof} because its phi value is zero."
+            return [value / reference_value for value in vector], None
+        return vector[:], None
+
+    def _modal_results_with_display_shape(self, results: object, mode_index: int, mode_shape: list[float]) -> object:
+        proxy = type("ModalResultsDisplayProxy", (), {})()
+        proxy.__dict__.update(getattr(results, "__dict__", {}))
+        shapes = list(getattr(results, "mode_shapes", []) or [])
+        if 0 <= mode_index < len(shapes):
+            shapes[mode_index] = mode_shape[:]
+        proxy.mode_shapes = shapes
+        return proxy
+
+    def _modal_phi_table_data(self, mode_shape: list[float] | None, message: str | None = None) -> tuple[tuple[str, ...], list[tuple[str, ...]]]:
+        if message:
+            return (("Message",), [(message,)])
+        if mode_shape is None:
+            return (("Message",), [("Phi values are unavailable.",)])
+        return (
+            ("DOF", "Phi"),
+            [
+                (f"DOF{index + 1}", self._format_number(value))
+                for index, value in enumerate(mode_shape)
+            ],
+        )
+
+    def _refresh_modal_mode_shape_controls(self) -> None:
+        normalization_selector = getattr(self, "result_viewer_dynamic_mode_normalization_selector", None)
+        if normalization_selector is not None:
+            normalization_selector.configure(
+                values=("Mass normalized", "Magnitude normalized", "Specific DOF normalized"),
+                state="readonly",
+            )
+
+        reference_selector = getattr(self, "result_viewer_dynamic_reference_dof_selector", None)
+        reference_var = getattr(self, "result_viewer_dynamic_reference_dof_var", None)
+        results = self._current_modal_results()
+        mode_index = self._current_modal_mode_index()
+        dof_values: tuple[str, ...] = ()
+        if results is not None and mode_index is not None:
+            mode_shapes = getattr(results, "mode_shapes", None) or []
+            if 0 <= mode_index < len(mode_shapes):
+                vector = self._modal_mode_shape_vector(mode_shapes[mode_index])
+                if vector is not None:
+                    dof_values = tuple(str(index) for index in range(1, len(vector) + 1))
+
+        if reference_selector is not None:
+            normalization = self._current_modal_mode_normalization()
+            state = "readonly" if normalization == "Specific DOF normalized" and dof_values else "disabled"
+            reference_selector.configure(values=dof_values, state=state)
+        if reference_var is not None:
+            current_value = reference_var.get() if hasattr(reference_var, "get") else ""
+            if dof_values:
+                if current_value not in dof_values:
+                    reference_var.set(dof_values[0])
+            else:
+                reference_var.set("1")
+
     def _refresh_modal_mode_shape_view(self) -> None:
         frame = getattr(self, "result_viewer_dynamic_plot_frame", None)
         if frame is None:
             return
         self._update_modal_mode_info_panel()
         self._clear_viewer_container(frame)
+        self._refresh_modal_mode_shape_controls()
         canvas = getattr(self, "result_viewer_dynamic_plot_canvas", None)
         if canvas is not None:
             self.result_viewer_dynamic_plot_canvas = None
+        phi_tree = getattr(self, "result_viewer_dynamic_phi_tree", None)
         results = self._current_modal_results()
         if results is None:
+            self._render_result_table(phi_tree, ("Message",), [("Run Modal Analysis first.",)], column_width=120)
             ttk.Label(frame, text="Run Modal Analysis first.").grid(row=0, column=0, sticky="nw")
             return
         message = self._modal_mode_shape_message(results)
         if message is not None:
+            self._render_result_table(phi_tree, ("Message",), [(message,)], column_width=120)
             ttk.Label(frame, text=message).grid(row=0, column=0, sticky="nw")
             return
         mode_index = self._current_modal_mode_index()
         if mode_index is None:
+            self._render_result_table(phi_tree, ("Message",), [("Invalid mode index.",)], column_width=120)
             ttk.Label(frame, text="Invalid mode index.").grid(row=0, column=0, sticky="nw")
             return
         model = getattr(getattr(self, "model_canvas", None), "builder", None)
         model = getattr(model, "model", None)
         if model is None:
+            self._render_result_table(phi_tree, ("Message",), [("No model available for Modal results.",)], column_width=120)
             ttk.Label(frame, text="No model available for Modal results.").grid(row=0, column=0, sticky="nw")
             return
+        mode_shapes = getattr(results, "mode_shapes", None) or []
+        mode_shape = mode_shapes[mode_index] if 0 <= mode_index < len(mode_shapes) else None
+        normalization = self._current_modal_mode_normalization()
+        reference_dof = self._current_modal_reference_dof()
+        normalized_shape, normalization_message = self._normalize_modal_mode_shape(mode_shape, normalization, reference_dof)
+        phi_columns, phi_rows = self._modal_phi_table_data(normalized_shape, normalization_message)
+        self._render_result_table(phi_tree, phi_columns, phi_rows, column_width=120)
+        if normalization_message is not None:
+            ttk.Label(frame, text=normalization_message).grid(row=0, column=0, sticky="nw")
+            return
         try:
-            fig, _ = plot_modal_mode_shape(model, results, mode_index=mode_index)
+            display_results = self._modal_results_with_display_shape(results, mode_index, normalized_shape)
+            fig, _ = plot_modal_mode_shape(model, display_results, mode_index=mode_index)
         except Exception as exc:
+            self._render_result_table(phi_tree, ("Message",), [(str(exc),)], column_width=120)
             ttk.Label(frame, text=str(exc)).grid(row=0, column=0, sticky="nw")
             return
         canvas = FigureCanvasTkAgg(fig, master=frame)
