@@ -654,6 +654,15 @@ def test_desktop_modal_mode_shape_specific_dof_zero_value_reports_clear_message(
     assert message == "Cannot normalize by DOF1 because its phi value is zero."
 
 
+def test_desktop_modal_mode_shape_specific_dof_near_zero_value_reports_clear_message():
+    window = _window_with_model()
+
+    normalized, message = window._normalize_modal_mode_shape([1.0e-13, 1.0, 2.0], "Specific DOF normalized", 1)
+
+    assert normalized is None
+    assert message == "Cannot normalize by DOF1 because its phi value is zero."
+
+
 def test_desktop_modal_results_empty_state_uses_singular_cache():
     window = _window_with_model()
 
@@ -706,6 +715,18 @@ def test_desktop_modal_matrix_tab_falls_back_to_indices_without_dof_labels():
 
     assert columns == ("DOF", "DOF1", "DOF2")
     assert rows == [("DOF1", "1", "2"), ("DOF2", "3", "4")]
+
+
+def test_desktop_modal_matrix_selector_hides_cff_without_computed_rayleigh_damping():
+    window = _window_with_model()
+    window.latest_modal_result = SimpleNamespace(
+        Kff=[[1.0]],
+        Mff=[[2.0]],
+        Cff=None,
+        dynamic_assembly=SimpleNamespace(Cff=[[0.0]]),
+    )
+
+    assert window._modal_result_categories() == ["Kff", "Mff"]
 
 
 def test_desktop_modal_matrix_tab_uses_modal_result_without_static_result():

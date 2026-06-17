@@ -52,14 +52,26 @@ def run_modal_analysis(
         _attach_modal_dynamic_context(results, data)
         requested_rayleigh = (rayleigh_target_mode_i, rayleigh_zeta_i, rayleigh_target_mode_j, rayleigh_zeta_j)
         if all(value is not None for value in requested_rayleigh):
-            _apply_modal_rayleigh_damping(
-                results,
-                data,
-                target_mode_i=rayleigh_target_mode_i,
-                zeta_i=rayleigh_zeta_i,
-                target_mode_j=rayleigh_target_mode_j,
-                zeta_j=rayleigh_zeta_j,
-            )
+            try:
+                _apply_modal_rayleigh_damping(
+                    results,
+                    data,
+                    target_mode_i=rayleigh_target_mode_i,
+                    zeta_i=rayleigh_zeta_i,
+                    target_mode_j=rayleigh_target_mode_j,
+                    zeta_j=rayleigh_zeta_j,
+                )
+            except ValueError as exc:
+                if not (
+                    _is_default_modal_rayleigh_request(
+                        target_mode_i=rayleigh_target_mode_i,
+                        zeta_i=rayleigh_zeta_i,
+                        target_mode_j=rayleigh_target_mode_j,
+                        zeta_j=rayleigh_zeta_j,
+                    )
+                    and _can_skip_default_modal_rayleigh_damping(exc)
+                ):
+                    raise
         else:
             default_rayleigh = _default_modal_rayleigh_targets(results)
             if default_rayleigh is not None:
@@ -219,7 +231,17 @@ def _attach_modal_dynamic_context(results: ModalResults, data: DynamicAssemblyDa
     results.dynamic_assembly = data
     results.Kff = [row[:] for row in data.Kff]
     results.Mff = [row[:] for row in data.Mff]
+    results.Cff = None
     results.omegas = _modal_omegas(results)
+    results.rayleigh_alpha = None
+    results.rayleigh_beta = None
+    results.rayleigh_target_mode_i = None
+    results.rayleigh_target_mode_j = None
+    results.rayleigh_zeta_i = None
+    results.rayleigh_zeta_j = None
+    results.rayleigh_target_modes = None
+    results.rayleigh_target_damping_ratios = None
+    results.modal_damping_ratios = None
 
 
 def _apply_modal_rayleigh_damping(
@@ -231,6 +253,19 @@ def _apply_modal_rayleigh_damping(
     target_mode_j: int,
     zeta_j: float,
 ) -> None:
+    _validate_modal_rayleigh_request(
+        target_mode_i=target_mode_i,
+        zeta_i=zeta_i,
+        target_mode_j=target_mode_j,
+        zeta_j=zeta_j,
+    )
+    _record_modal_rayleigh_request(
+        results,
+        target_mode_i=target_mode_i,
+        zeta_i=zeta_i,
+        target_mode_j=target_mode_j,
+        zeta_j=zeta_j,
+    )
     rayleigh = _build_rayleigh_damping_data(
         results,
         data.Kff,
@@ -248,12 +283,6 @@ def _apply_modal_rayleigh_damping(
     results.Cff = [row[:] for row in rayleigh["Cff"]]
     results.rayleigh_alpha = rayleigh["alpha"]
     results.rayleigh_beta = rayleigh["beta"]
-    results.rayleigh_target_mode_i = target_mode_i
-    results.rayleigh_target_mode_j = target_mode_j
-    results.rayleigh_zeta_i = zeta_i
-    results.rayleigh_zeta_j = zeta_j
-    results.rayleigh_target_modes = (target_mode_i, target_mode_j)
-    results.rayleigh_target_damping_ratios = (zeta_i, zeta_j)
     results.modal_damping_ratios = rayleigh["modal_damping_ratios"]
 
 
@@ -267,12 +296,12 @@ def _build_rayleigh_damping_data(
     target_mode_j: int,
     zeta_j: float,
 ) -> dict[str, object]:
-    if target_mode_i < 1 or target_mode_j < 1:
-        raise ValueError("Rayleigh target modes must be at least 1.")
-    if target_mode_i == target_mode_j:
-        raise ValueError("Rayleigh target modes must be distinct.")
-    if zeta_i < 0.0 or zeta_j < 0.0:
-        raise ValueError("Rayleigh damping ratios must be nonnegative.")
+    _validate_modal_rayleigh_request(
+        target_mode_i=target_mode_i,
+        zeta_i=zeta_i,
+        target_mode_j=target_mode_j,
+        zeta_j=zeta_j,
+    )
 
     omegas = _modal_omegas(results)
     mode_count = len(omegas)
@@ -307,6 +336,61 @@ def _build_rayleigh_damping_data(
         "Cff": Cff,
         "modal_damping_ratios": modal_damping_ratios,
     }
+
+
+def _validate_modal_rayleigh_request(
+    *,
+    target_mode_i: int,
+    zeta_i: float,
+    target_mode_j: int,
+    zeta_j: float,
+) -> None:
+    if target_mode_i < 1 or target_mode_j < 1:
+        raise ValueError("Rayleigh target modes must be at least 1.")
+    if target_mode_i == target_mode_j:
+        raise ValueError("Rayleigh target modes must be distinct.")
+    if zeta_i < 0.0 or zeta_j < 0.0:
+        raise ValueError("Rayleigh damping ratios must be nonnegative.")
+
+
+def _record_modal_rayleigh_request(
+    results: ModalResults | object,
+    *,
+    target_mode_i: int,
+    zeta_i: float,
+    target_mode_j: int,
+    zeta_j: float,
+) -> None:
+    results.rayleigh_target_mode_i = target_mode_i
+    results.rayleigh_target_mode_j = target_mode_j
+    results.rayleigh_zeta_i = zeta_i
+    results.rayleigh_zeta_j = zeta_j
+    results.rayleigh_target_modes = (target_mode_i, target_mode_j)
+    results.rayleigh_target_damping_ratios = (zeta_i, zeta_j)
+
+
+def _is_default_modal_rayleigh_request(
+    *,
+    target_mode_i: int,
+    zeta_i: float,
+    target_mode_j: int,
+    zeta_j: float,
+) -> bool:
+    return (
+        target_mode_i == 1
+        and target_mode_j == 2
+        and math.isclose(zeta_i, 0.05, rel_tol=0.0, abs_tol=1.0e-12)
+        and math.isclose(zeta_j, 0.05, rel_tol=0.0, abs_tol=1.0e-12)
+    )
+
+
+def _can_skip_default_modal_rayleigh_damping(error: ValueError) -> bool:
+    message = str(error)
+    return (
+        "must exist in the extracted modal results" in message
+        or "must have positive frequencies" in message
+        or "must have distinct positive frequencies" in message
+    )
 
 
 def _modal_omegas(results: ModalResults | object) -> list[float]:

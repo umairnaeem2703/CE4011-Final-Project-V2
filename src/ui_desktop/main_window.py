@@ -1218,10 +1218,11 @@ class MainWindow:
         return getattr(container, key, None)
 
     def _get_modal_matrix(self, result: object, key: str) -> object | None:
+        if key == "Cff":
+            return self._modal_container_value(result, "Cff")
         aliases = {
             "Kff": ("Kff", "K"),
             "Mff": ("Mff", "M"),
-            "Cff": ("Cff", "C"),
         }
         for container in self._modal_result_containers(result):
             for alias in aliases.get(key, (key,)):
