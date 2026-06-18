@@ -73,7 +73,7 @@ def test_static_deformed_shape_uses_static_results():
 
     assert isinstance(fig, plt.Figure)
     assert isinstance(ax, plt.Axes)
-    assert ax.get_title() == "Deformed Shape (Scale = 1.0x)"
+    assert ax.get_title() == "Static Deformed Shape (Scale = 1.0x)"
     assert list(deformed_line.get_ydata()) == [0.0, -0.1]
     plt.close(ax.figure)
 
@@ -83,7 +83,7 @@ def test_nvm_diagrams_use_static_results_nvm_data():
     fig, axes = plot_static_nvm_diagrams(_frame_model(), _static_results(), scale=0.1)
 
     assert isinstance(fig, plt.Figure)
-    assert [ax.get_title() for ax in axes] == ["Axial Force (N)", "Shear Force (V)", "Bending Moment (M)"]
+    assert [ax.get_title() for ax in axes] == ["Axial Force Diagram", "Shear Force Diagram", "Bending Moment Diagram"]
     assert len(axes[0].patches) == 2
     assert len(axes[1].patches) == 3
     assert len(axes[2].patches) == 2
@@ -116,7 +116,7 @@ def test_mode_shape_plot_uses_modal_results():
     deformed_line = ax.lines[1]
 
     assert isinstance(fig, plt.Figure)
-    assert ax.get_title() == "Mode Shape 1, T = 0.5 s"
+    assert ax.get_title() == "Mode Shape 1 - f = 1 Hz - T = 0.5 s"
     assert list(deformed_line.get_ydata())[-1] == 0.2
     plt.close(ax.figure)
 

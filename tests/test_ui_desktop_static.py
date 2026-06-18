@@ -98,8 +98,16 @@ class DummyNotebook(DummyWidget):
     def add(self, frame, text=""):
         self.tabs.append((frame, text))
 
-    def select(self, frame):
+    def select(self, frame=None):
+        if frame is None:
+            return self.selected
         self.selected = frame
+
+    def tab(self, frame, option=None):
+        for tab_frame, text in self.tabs:
+            if tab_frame is frame:
+                return text if option == "text" else {"text": text}
+        return "" if option == "text" else {"text": ""}
 
 
 class DummyPanedwindow(DummyWidget):
@@ -176,7 +184,8 @@ def _window_with_model(model=object()):
     window.latest_modal_result = None
     window.modal_analysis_error = None
     window._analysis_results_cleared = False
-    window._analysis_results_clear_message = "Results were cleared because the model changed. Run analysis again."
+    window._analysis_results_clear_message = "Model changed. Previous Static/Modal results were cleared."
+    window.status_summary_var = DummyVar("")
     window.modal_num_modes_var = DummyVar("3")
     window.modal_rayleigh_mode_i_var = DummyVar("1")
     window.modal_rayleigh_zeta_i_var = DummyVar("0.05")
@@ -185,11 +194,19 @@ def _window_with_model(model=object()):
     window.result_view_category = None
     window.result_view_tree = None
     window.result_viewer_notebook = None
+    window.result_viewer_section_var = DummyVar("Summary")
+    window.result_viewer_static_notebook = None
+    window.result_viewer_static_tabs = {}
+    window.result_viewer_static_trees = {}
+    window.result_viewer_static_matrix_var = None
     window.result_viewer_table_tab = None
     window.result_viewer_dynamic_tab = None
     window.result_viewer_shell_tab = None
     window.result_viewer_dynamic_message = None
     window.result_viewer_dynamic_tree = None
+    window.result_viewer_dynamic_tabs = {}
+    window.result_viewer_dynamic_trees = {}
+    window.result_viewer_dynamic_view_var = DummyVar("Summary")
     window.result_viewer_member_tab = None
     window.result_viewer_member_selector = None
     window.result_viewer_member_message = None
@@ -243,6 +260,7 @@ def _window_with_model(model=object()):
     window.result_viewer_dynamic_mode_precision_selector = None
     window.result_viewer_dynamic_matrix_selector = None
     window.result_viewer_dynamic_matrix_tree = None
+    window.result_viewer_dynamic_table_tree = None
     window.result_viewer_dynamic_mode_info_frame = None
     window.result_viewer_dynamic_mode_info_vars = {}
     window.result_viewer_dynamic_plot_frame = None
@@ -485,13 +503,14 @@ def test_desktop_modal_results_builds_dropdown_layout(monkeypatch):
     monkeypatch.setattr(main_window.ttk, "LabelFrame", DummyLabelFrame)
     monkeypatch.setattr(main_window.ttk, "Treeview", DummyTreeview)
     monkeypatch.setattr(main_window.ttk, "Scrollbar", DummyScrollbar)
+    monkeypatch.setattr(main_window.ttk, "Notebook", DummyNotebook)
 
     window._build_modal_results_tab(parent)
 
-    assert window.result_viewer_dynamic_view_selector.configured["values"] == ("Modal Summary", "Mode Shapes", "Matrices")
-    assert window.result_viewer_dynamic_notebook is None
-    assert window.result_viewer_dynamic_message.get() == "Run Modal Analysis first."
-    assert window.result_viewer_dynamic_summary_tree.rows == [("Run Modal Analysis first.",)]
+    assert isinstance(window.result_viewer_dynamic_notebook, DummyNotebook)
+    assert [text for _frame, text in window.result_viewer_dynamic_notebook.tabs] == ["Summary", "DOF Map", "Matrices", "Modal Table", "Mode Shapes"]
+    assert window.result_viewer_dynamic_message.get() == "No Modal result is available. Assign masses, validate the model, then run Analyze → Run Modal Analysis."
+    assert window.result_viewer_dynamic_summary_tree.rows == [("No Modal result is available. Assign masses, validate the model, then run Analyze → Run Modal Analysis.",)]
     assert window.result_viewer_dynamic_mode_selector.configured["state"] == "disabled"
     assert window.result_viewer_dynamic_matrix_selector.configured["state"] == "disabled"
     assert window.result_viewer_dynamic_reference_dof_selector.configured["state"] == "disabled"
@@ -568,12 +587,41 @@ def test_desktop_command_area_builds_dropdown_menus(monkeypatch):
     assert [entry[1]["label"] for entry in created[0].entries if entry[0] == "cascade"] == [name for name, _items in main_window.COMMAND_TABS]
     edit_entries = next(entry[1]["menu"].entries for entry in created[0].entries if entry[0] == "cascade" and entry[1]["label"] == "Edit")
     view_entries = next(entry[1]["menu"].entries for entry in created[0].entries if entry[0] == "cascade" and entry[1]["label"] == "View")
+    help_entries = next(entry[1]["menu"].entries for entry in created[0].entries if entry[0] == "cascade" and entry[1]["label"] == "Help")
     assert not any(item[1].get("label") == "Move Selection" for item in edit_entries if item[0] == "command")
     assert not any(item[1].get("label") == "Window Select" for item in view_entries if item[0] == "command")
+    assert [item[1].get("label") for item in help_entries if item[0] == "command"] == ["Quick Start", "User Manual", "About"]
 
 
 def test_desktop_new_model_dialog_exposes_revised_template_options():
     assert NewModelDialog.TEMPLATE_OPTIONS == ("Blank Model", "2D Shear Frame Template")
+
+
+def test_desktop_help_actions_are_safe_and_read_only(monkeypatch):
+    window = _window_with_model()
+    messages = []
+    monkeypatch.setattr(main_window.messagebox, "showinfo", lambda title, message, parent=None: messages.append((title, message)))
+    monkeypatch.setattr(main_window.os, "startfile", lambda path: (_ for _ in ()).throw(OSError("missing")))
+
+    window._toolbar_action("Quick Start")
+    window._toolbar_action("User Manual")
+    window._toolbar_action("About")
+
+    assert messages[0][0] == "Quick Start"
+    assert "Blank Model" in messages[0][1]
+    assert messages[1] == ("User Manual", "User manual will be provided with the final documentation package.")
+    assert messages[2][0] == "About"
+    assert "CE 4011 Structural Analysis Suite" in messages[2][1]
+
+
+def test_desktop_status_bar_reports_model_and_result_state():
+    window = _window_with_model(model=SimpleNamespace(name="State Model", nodes={1: object(), 2: object()}, elements={"e1": object()}, unit_system="kN_m_tonne"))
+    window.latest_static_result = object()
+    window.status_summary_var = DummyVar("")
+
+    window._update_status_bar()
+
+    assert window.status_summary_var.get() == "Model: State Model | Nodes: 2 | Members: 1 | Static: current | Modal: missing | Units: kN_m_tonne"
 
 
 def test_desktop_workspace_uses_horizontal_panedwindow(monkeypatch):
@@ -587,11 +635,13 @@ def test_desktop_workspace_uses_horizontal_panedwindow(monkeypatch):
     monkeypatch.setattr(main_window.ttk, "Frame", DummyFrame)
     monkeypatch.setattr(main_window, "ObjectTreePanel", lambda parent, selection_callback=None: SimpleNamespace(grid=lambda **_kw: None))
     monkeypatch.setattr(main_window, "ModelCanvas", lambda *args, **kwargs: SimpleNamespace(grid=lambda **_kw: None, canvas=object()))
+    monkeypatch.setattr(main_window, "PropertyPanel", lambda *args, **kwargs: DummyFrame())
 
     window._build_workspace_area()
+    window._build_right_panel()
 
     assert window.workspace_panedwindow.kwargs["orient"] == main_window.tk.HORIZONTAL
-    assert len(window.workspace_panedwindow.added) == 2
+    assert len(window.workspace_panedwindow.added) == 3
 
 
 def test_desktop_move_selection_translates_selected_objects_and_elements():
@@ -857,7 +907,7 @@ def test_desktop_modal_results_empty_state_uses_singular_cache():
     columns, rows = window._modal_result_rows()
 
     assert columns == ("Message",)
-    assert rows == [("Run Modal Analysis first.",)]
+    assert rows == [("No Modal result is available. Assign masses, validate the model, then run Analyze → Run Modal Analysis.",)]
 
 
 def test_desktop_modal_matrix_selector_exposes_optional_damping_matrices():
@@ -940,7 +990,7 @@ def test_desktop_static_results_empty_state_uses_singular_cache():
     columns, rows = window._static_result_table_data("Nodal Displacements")
 
     assert columns == ("Message",)
-    assert rows == [("Run Static Analysis first.",)]
+    assert rows == [("No Static result is available. Run Analyze → Run Static Analysis first.",)]
 
 
 def test_desktop_static_result_tables_use_cached_result_fields():
@@ -1098,7 +1148,7 @@ def test_settlement_member_end_forces_match_sap2000_sign_convention():
     result = run_static_analysis(model)
     assert result.ok
 
-    expected = _sap_element_joint_forces(repo_root / "sap2000" / "test-settlement-results.txt")
+    expected = _sap_element_joint_forces(repo_root / "sap2000_solutions" / "test-settlement-results.txt")
     for element_id in ("F1", "F2", "F4", "T1"):
         computed = result.results.member_end_forces[element_id]
         for end_label, joint_index in (("i", 0), ("j", 1)):
@@ -1130,7 +1180,7 @@ def test_desktop_static_result_table_empty_state():
     columns, rows = window._static_result_table_data("Nodal Displacements")
 
     assert columns == ("Message",)
-    assert rows == [("Run Static Analysis first.",)]
+    assert rows == [("No Static result is available. Run Analyze → Run Static Analysis first.",)]
 
 
 def test_desktop_results_button_callback_handles_partial_viewer_state(monkeypatch):
@@ -1147,7 +1197,7 @@ def test_desktop_results_button_callback_handles_partial_viewer_state(monkeypatc
 
     assert refreshes == []
     assert selected_tabs == []
-    assert window.messages[-1] == "Run Modal Analysis first."
+    assert window.messages[-1] == "No Modal result is available. Assign masses, validate the model, then run Analyze → Run Modal Analysis."
 
 
 def test_desktop_results_window_switches_between_static_and_dynamic_modes(monkeypatch):
@@ -1349,7 +1399,7 @@ def test_desktop_results_workflow_initializes_individual_member_tab(monkeypatch)
 
 
 def test_desktop_static_complete_model_viewer_renders_plots(monkeypatch):
-    assert main_window.COMMAND_TABS[-1][1] == (("action", "Static Results"), ("action", "Modal Results"))
+    assert dict(main_window.COMMAND_TABS)["Results"] == (("action", "Static Results"), ("action", "Modal Results"))
     window = _window_with_model()
 
     class DummyFrame:
@@ -1420,10 +1470,11 @@ def test_desktop_static_complete_model_viewer_renders_plots(monkeypatch):
 
 
 def test_desktop_final_scope_exposes_static_and_modal_only():
-    analyze_actions = main_window.COMMAND_TABS[-2][1]
-    result_actions = main_window.COMMAND_TABS[-1][1]
+    tabs = dict(main_window.COMMAND_TABS)
+    analyze_actions = tabs["Analyze"]
+    result_actions = tabs["Results"]
 
-    assert analyze_actions == (("action", "Run Static Analysis"), ("action", "Run Modal Analysis"))
+    assert analyze_actions == (("action", "Validate Model"), ("action", "Run Static Analysis"), ("action", "Run Modal Analysis"))
     assert result_actions == (("action", "Static Results"), ("action", "Modal Results"))
     exposed_labels = " ".join(label for _kind, label in analyze_actions + result_actions)
     assert "RSA" not in exposed_labels
@@ -1463,8 +1514,8 @@ def test_desktop_static_complete_model_viewer_empty_states(monkeypatch):
     window.result_viewer_plot_canvases = {}
 
     window._refresh_static_viewer()
-    assert messages[-1] == "Run Static Analysis first."
-    assert "Run Static Analysis first." in labels
+    assert messages[-1] == "No Static result is available. Run Analyze → Run Static Analysis first."
+    assert "No Static result is available. Run Analyze → Run Static Analysis first." in labels
 
     window.latest_static_result = SimpleNamespace(displacements={1: [0.0, 0.0, 0.0]}, nvm_data={})
     window._refresh_static_viewer()
@@ -1668,8 +1719,8 @@ def test_desktop_member_review_viewer_empty_states(monkeypatch):
     window.result_viewer_member_max_disp_var = DummyVar("-")
 
     window._refresh_individual_member_viewer()
-    assert messages[-1] == "Run Static Analysis first."
-    assert "Run Static Analysis first." in labels
+    assert messages[-1] == "No Static result is available. Run Analyze → Run Static Analysis first."
+    assert "No Static result is available. Run Analyze → Run Static Analysis first." in labels
     assert window.result_viewer_member_current_location_var.get() == "-"
 
     window.latest_static_result = SimpleNamespace(element_forces={}, nvm_data={})
@@ -1804,6 +1855,31 @@ def test_desktop_open_xml_replaces_builder_refreshes_ui_and_clears_results(tmp_p
     assert ("restore_full_view", False) in events
     assert errors == []
     assert window.messages[-1] == f"Opened XML: {xml_path}"
+    assert window.status_summary_var.get().startswith("Model: Imported Desktop Model | Nodes: 2 | Members: 1")
+
+
+def test_desktop_canvas_mouse_wheel_and_middle_pan_update_view():
+    canvas = main_window.ModelCanvas.__new__(main_window.ModelCanvas)
+    canvas._pan_last = None
+    canvas.view_origin_x = 100.0
+    canvas.view_origin_y = 200.0
+    canvas.view_scale = 40.0
+    canvas.canvas = SimpleNamespace(winfo_width=lambda: 800, winfo_height=lambda: 600)
+    zoom_calls = []
+    redraw_calls = []
+    canvas._zoom = lambda factor, focus_x=None, focus_y=None: zoom_calls.append((factor, focus_x, focus_y))
+    canvas.redraw_model = lambda *args, **kwargs: redraw_calls.append((canvas.view_origin_x, canvas.view_origin_y))
+
+    break_result = canvas._handle_mouse_wheel(SimpleNamespace(delta=120, x=140, y=160))
+    canvas._handle_middle_button_press(SimpleNamespace(x=10, y=20))
+    canvas._handle_middle_drag(SimpleNamespace(x=25, y=35))
+    canvas._handle_middle_button_release(SimpleNamespace(x=25, y=35))
+
+    assert break_result == "break"
+    assert zoom_calls == [(1.15, 140, 160)]
+    assert canvas.view_origin_x == 115.0
+    assert canvas.view_origin_y == 215.0
+    assert redraw_calls
 
 
 def test_desktop_model_change_clears_stale_results_and_refreshes_open_viewer():

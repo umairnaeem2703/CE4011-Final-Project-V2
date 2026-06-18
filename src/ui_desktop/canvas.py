@@ -16,6 +16,17 @@ StatusCallback = Callable[[str], None]
 SelectionCallback = Callable[[str | None, object | None], None]
 ChangeCallback = Callable[[], None]
 
+CANVAS_BACKGROUND = "#ffffff"
+GRID_COLOR = "#ebebeb"
+GRID_AXIS_COLOR = "#d2d2d2"
+MEMBER_COLOR = "#1f4e79"
+MEMBER_TRUSS_COLOR = "#184e77"
+NODE_FILL_COLOR = "#1f4e79"
+NODE_OUTLINE_COLOR = "#1f4e79"
+LABEL_COLOR = "#2f2f2f"
+SELECTED_COLOR = "#ff8c00"
+SYMBOL_COLOR = "#6b7280"
+
 
 def _load_model_builder():
     try:
@@ -95,13 +106,19 @@ class ModelCanvas(ttk.Frame):
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
-        self.canvas = tk.Canvas(self, background="white", highlightthickness=1, highlightbackground="#b8b8b8")
+        self.canvas = tk.Canvas(self, background=CANVAS_BACKGROUND, highlightthickness=1, highlightbackground="#cfd8e3")
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.canvas.bind("<Configure>", self._handle_configure)
         self.canvas.bind("<Button-1>", self._handle_click)
         self.canvas.bind("<ButtonPress-1>", self._handle_button_press, add="+")
         self.canvas.bind("<B1-Motion>", self._handle_drag)
         self.canvas.bind("<ButtonRelease-1>", self._handle_button_release)
+        self.canvas.bind("<MouseWheel>", self._handle_mouse_wheel)
+        self.canvas.bind("<Button-4>", self._handle_mouse_wheel)
+        self.canvas.bind("<Button-5>", self._handle_mouse_wheel)
+        self.canvas.bind("<ButtonPress-2>", self._handle_middle_button_press)
+        self.canvas.bind("<B2-Motion>", self._handle_middle_drag)
+        self.canvas.bind("<ButtonRelease-2>", self._handle_middle_button_release)
 
     def load_builder(self, builder) -> None:
         self.builder = builder
@@ -337,16 +354,37 @@ class ModelCanvas(ttk.Frame):
             return
         if self.active_command != "Pan" or self._pan_last is None:
             return
-        last_x, last_y = self._pan_last
-        self.view_origin_x += event.x - last_x
-        self.view_origin_y += event.y - last_y
-        self._pan_last = (event.x, event.y)
-        self.redraw_model()
+        self._pan_view(event.x, event.y)
 
     def _handle_button_release(self, event) -> None:
         if self._is_neutral_selection_mode() and self._window_start is not None:
             self._finish_window_selection(event.x, event.y)
         self._pan_last = None
+
+    def _handle_middle_button_press(self, event) -> None:
+        self._pan_last = (event.x, event.y)
+
+    def _handle_middle_drag(self, event) -> None:
+        if self._pan_last is None:
+            return
+        self._pan_view(event.x, event.y)
+
+    def _handle_middle_button_release(self, _event) -> None:
+        self._pan_last = None
+
+    def _handle_mouse_wheel(self, event) -> str | None:
+        delta = getattr(event, "delta", 0)
+        if not delta:
+            num = getattr(event, "num", None)
+            if num == 4:
+                delta = 120
+            elif num == 5:
+                delta = -120
+        if not delta:
+            return None
+        factor = 1.15 if delta > 0 else 1 / 1.15
+        self._zoom(factor, getattr(event, "x", None), getattr(event, "y", None))
+        return "break"
 
     def _handle_click(self, event) -> None:
         if self.active_command == "Pan":
@@ -1120,7 +1158,7 @@ class ModelCanvas(ttk.Frame):
         node = self.builder.model.nodes[node_id]
         fill, outline, width = self._node_style(node)
         item_id = self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill=fill, outline=outline, width=width)
-        label_id = self.canvas.create_text(cx + 10, cy - 10, text=str(node_id), fill="#1f77b4", anchor="w")
+        label_id = self.canvas.create_text(cx + 10, cy - 10, text=str(node_id), fill=LABEL_COLOR, anchor="w", font=("Segoe UI", 8))
         self.canvas.addtag_withtag("node", item_id)
         self.canvas.addtag_withtag("node-label", label_id)
         self.item_to_node_id[item_id] = node_id
@@ -1131,7 +1169,7 @@ class ModelCanvas(ttk.Frame):
         end_node = self.builder.model.nodes[end_node_id]
         x1, y1 = self._model_to_canvas(start_node.x, start_node.y)
         x2, y2 = self._model_to_canvas(end_node.x, end_node.y)
-        color = "#333333" if element_type == "frame" else "#0a7f58"
+        color = MEMBER_COLOR if element_type == "frame" else MEMBER_TRUSS_COLOR
         item_id = self.canvas.create_line(x1, y1, x2, y2, fill=color, width=3)
         self.canvas.tag_lower(item_id)
         self.item_to_element_id[item_id] = element_id
@@ -1150,7 +1188,7 @@ class ModelCanvas(ttk.Frame):
         uy = (toward_y - y) / length
         cx = x + ux * (self.node_radius + 5)
         cy = y + uy * (self.node_radius + 5)
-        r = max(3, self.node_radius - 1)
+        r = max(2, self.node_radius - 2)
         self.canvas.create_oval(
             cx - r,
             cy - r,
@@ -1158,7 +1196,7 @@ class ModelCanvas(ttk.Frame):
             cy + r,
             fill="white",
             outline=color,
-            width=2,
+            width=1.5,
             tags="symbol",
         )
 
@@ -1201,7 +1239,7 @@ class ModelCanvas(ttk.Frame):
                 head_1[0] + 3,
                 head_1[1] - 3,
                 text="1",
-                fill="#1f77b4",
+                fill=MEMBER_COLOR,
                 anchor="w",
                 font=("Segoe UI", 8),
                 tags=("symbol", "local-axis"),
@@ -1210,7 +1248,7 @@ class ModelCanvas(ttk.Frame):
                 head_2[0] + 3,
                 head_2[1] - 3,
                 text="2",
-                fill="#2ca02c",
+                fill=MEMBER_TRUSS_COLOR,
                 anchor="w",
                 font=("Segoe UI", 8),
                 tags=("symbol", "local-axis"),
@@ -1234,7 +1272,7 @@ class ModelCanvas(ttk.Frame):
             head_y,
             arrow=tk.LAST,
             fill=color,
-            width=2,
+            width=1.5,
             tags=("symbol", "local-axis"),
         )
         return head_x, head_y
@@ -1242,25 +1280,25 @@ class ModelCanvas(ttk.Frame):
     def _draw_support_symbol(self, support) -> None:
         x, y = self._model_to_canvas(support.node.x, support.node.y)
         if support.restrain_ux and support.restrain_uy and support.restrain_rz:
-            self.canvas.create_rectangle(x - 10, y + 8, x + 10, y + 14, fill="#666666", outline="", tags="symbol")
+            self.canvas.create_rectangle(x - 9, y + 8, x + 9, y + 13, fill=SYMBOL_COLOR, outline="", tags="symbol")
         elif support.restrain_ux and support.restrain_uy:
-            self.canvas.create_polygon(x, y + 7, x - 10, y + 18, x + 10, y + 18, fill="#777777", tags="symbol")
+            self.canvas.create_polygon(x, y + 7, x - 9, y + 17, x + 9, y + 17, fill=SYMBOL_COLOR, tags="symbol")
         else:
-            self.canvas.create_oval(x - 9, y + 8, x + 9, y + 18, outline="#777777", tags="symbol")
+            self.canvas.create_oval(x - 8, y + 8, x + 8, y + 17, outline=SYMBOL_COLOR, tags="symbol")
         self._draw_settlement_symbol(x, y, support)
 
     def _draw_settlement_symbol(self, x: float, y: float, support) -> None:
         if support.settlement_ux:
             dx = 1 if support.settlement_ux > 0 else -1
             head_x, head_y = self._draw_vector_arrow(x, y, dx, 0, length=18, color="#c00000")
-            self._draw_symbol_label(head_x + 4 * dx, head_y + 8, f"ux={_fmt_value(support.settlement_ux)}", "#c00000")
+            self._draw_symbol_label(head_x + 4 * dx, head_y + 8, f"ux={_fmt_value(support.settlement_ux)}", "#a94442")
         if support.settlement_uy:
             dy = -1 if support.settlement_uy > 0 else 1
             head_x, head_y = self._draw_vector_arrow(x, y, 0, dy, length=18, color="#c00000")
-            self._draw_symbol_label(head_x - 4, head_y + 6 * dy, f"uy={_fmt_value(support.settlement_uy)}", "#c00000")
+            self._draw_symbol_label(head_x - 4, head_y + 6 * dy, f"uy={_fmt_value(support.settlement_uy)}", "#a94442")
         if support.settlement_rz:
             self._draw_curved_arrow(x, y, clockwise=support.settlement_rz < 0, color="#c00000", radius=15)
-            self._draw_symbol_label(x + 18, y + 24, f"rz={_fmt_value(support.settlement_rz)}", "#c00000")
+            self._draw_symbol_label(x + 18, y + 24, f"rz={_fmt_value(support.settlement_rz)}", "#a94442")
 
     def _draw_nodal_load_symbol(self, load) -> None:
         node = self.builder.model.nodes.get(load.node.id)
@@ -1270,14 +1308,14 @@ class ModelCanvas(ttk.Frame):
         if load.fx:
             dx = 1 if load.fx > 0 else -1
             head_x, head_y = self._draw_vector_arrow(x, y, dx, 0, length=22, color="#d62728")
-            self._draw_symbol_label(head_x + 4 * dx, head_y + 9, f"Fx={_fmt_value(load.fx)}", "#d62728")
+            self._draw_symbol_label(head_x + 4 * dx, head_y + 9, f"Fx={_fmt_value(load.fx)}", "#a94442")
         if load.fy:
             dy = -1 if load.fy > 0 else 1
             head_x, head_y = self._draw_vector_arrow(x, y, 0, dy, length=22, color="#d62728")
-            self._draw_symbol_label(head_x - 4, head_y + 6 * dy, f"Fy={_fmt_value(load.fy)}", "#d62728")
+            self._draw_symbol_label(head_x - 4, head_y + 6 * dy, f"Fy={_fmt_value(load.fy)}", "#a94442")
         if load.mz:
             self._draw_curved_arrow(x, y, clockwise=load.mz < 0, color="#d62728", radius=17)
-            self._draw_symbol_label(x + 20, y + 18, f"Mz={_fmt_value(load.mz)}", "#d62728")
+            self._draw_symbol_label(x + 20, y + 18, f"Mz={_fmt_value(load.mz)}", "#a94442")
 
     def _draw_member_udl_symbol(self, load) -> None:
         element = self.builder.model.elements.get(load.element.id)
@@ -1291,7 +1329,7 @@ class ModelCanvas(ttk.Frame):
         dx, dy = direction
         start = _offset_point(x1, y1, dx, dy, -18)
         end = _offset_point(x2, y2, dx, dy, -18)
-        self.canvas.create_line(start[0], start[1], end[0], end[1], fill="#ff7f0e", width=1, tags="symbol")
+        self.canvas.create_line(start[0], start[1], end[0], end[1], fill="#ff8c00", width=1, tags="symbol")
         for factor in (0.25, 0.5, 0.75):
             x = x1 + (x2 - x1) * factor
             y = y1 + (y2 - y1) * factor
@@ -1359,10 +1397,10 @@ class ModelCanvas(ttk.Frame):
         for angle in angles:
             radians = math.radians(angle)
             points.extend((x + radius * math.cos(radians), y + radius * math.sin(radians)))
-        self.canvas.create_line(*points, smooth=True, arrow=tk.LAST, fill=color, width=2, tags="symbol")
+        self.canvas.create_line(*points, smooth=True, arrow=tk.LAST, fill=color, width=1.5, tags="symbol")
 
     def _draw_symbol_label(self, x: float, y: float, text: str, color: str) -> None:
-        self.canvas.create_text(x, y, text=text, fill=color, anchor="w", font=("Segoe UI", 8), tags="symbol")
+        self.canvas.create_text(x, y, text=text, fill=color, anchor="w", font=("Segoe UI", 7), tags="symbol")
 
     def _draw_mass_symbol(self, node_id: int, mass) -> None:
         node = self.builder.model.nodes.get(node_id)
@@ -1370,7 +1408,7 @@ class ModelCanvas(ttk.Frame):
             return
         x, y = self._model_to_canvas(node.x, node.y)
         r = self.node_radius + 5
-        self.canvas.create_oval(x - r, y - r, x + r, y + r, fill="", outline="#c00000", width=2, tags="symbol")
+        self.canvas.create_oval(x - r, y - r, x + r, y + r, fill="", outline="#a94442", width=1.5, tags="symbol")
         label = _mass_label(mass)
         if label:
             self._draw_symbol_label(x + r + 6, y + 4, label, "#c00000")
@@ -1382,8 +1420,8 @@ class ModelCanvas(ttk.Frame):
         points.sort(key=lambda node: node.x)
         x1, y1 = self._model_to_canvas(points[0].x, points[0].y)
         x2, y2 = self._model_to_canvas(points[-1].x, points[-1].y)
-        self.canvas.create_line(x1, y1 - 18, x2, y2 - 18, fill="#9467bd", dash=(5, 3), width=2, tags="symbol")
-        self._draw_symbol_label(x1 + 8, y1 - 30, "D", "#9467bd")
+        self.canvas.create_line(x1, y1 - 16, x2, y2 - 16, fill="#6f42c1", dash=(4, 3), width=1.5, tags="symbol")
+        self._draw_symbol_label(x1 + 8, y1 - 28, "D", "#6f42c1")
 
     def _fit_view_to_model(self) -> None:
         nodes = list(self.builder.model.nodes.values())
@@ -1427,16 +1465,16 @@ class ModelCanvas(ttk.Frame):
 
         x = self.view_origin_x % spacing
         while x < width:
-            self.canvas.create_line(x, 0, x, height, fill="#eeeeee", tags="grid")
+            self.canvas.create_line(x, 0, x, height, fill=GRID_COLOR, tags="grid")
             x += spacing
 
         y = self.view_origin_y % spacing
         while y < height:
-            self.canvas.create_line(0, y, width, y, fill="#eeeeee", tags="grid")
+            self.canvas.create_line(0, y, width, y, fill=GRID_COLOR, tags="grid")
             y += spacing
 
-        self.canvas.create_line(0, self.view_origin_y, width, self.view_origin_y, fill="#d0d0d0", tags="grid")
-        self.canvas.create_line(self.view_origin_x, 0, self.view_origin_x, height, fill="#d0d0d0", tags="grid")
+        self.canvas.create_line(0, self.view_origin_y, width, self.view_origin_y, fill=GRID_AXIS_COLOR, tags="grid")
+        self.canvas.create_line(self.view_origin_x, 0, self.view_origin_x, height, fill=GRID_AXIS_COLOR, tags="grid")
 
     def _apply_selection_highlight(self) -> None:
         for node_id, item_id in self.node_id_to_item.items():
@@ -1448,15 +1486,15 @@ class ModelCanvas(ttk.Frame):
 
         for node_id in self.selected_node_ids:
             if node_id in self.node_id_to_item:
-                self.canvas.itemconfigure(self.node_id_to_item[node_id], outline="#ffbf00", width=3)
+                self.canvas.itemconfigure(self.node_id_to_item[node_id], outline=SELECTED_COLOR, width=4)
         for element_id in self.selected_element_ids:
             if element_id in self.element_id_to_item:
-                self.canvas.itemconfigure(self.element_id_to_item[element_id], width=6)
+                self.canvas.itemconfigure(self.element_id_to_item[element_id], width=5, fill=SELECTED_COLOR)
 
     def _node_style(self, node) -> tuple[str, str, int]:
         if node is not None and getattr(node, "is_hinged", False):
-            return "", "#1f77b4", 2
-        return "#1f77b4", "", 1
+            return "", NODE_OUTLINE_COLOR, 2
+        return NODE_FILL_COLOR, "", 1
 
     def _find_node_near_canvas_point(self, canvas_x: float, canvas_y: float) -> int | None:
         for node_id, item_id in self.node_id_to_item.items():
@@ -1485,11 +1523,20 @@ class ModelCanvas(ttk.Frame):
                 return node_id
         return None
 
-    def _zoom(self, factor: float) -> None:
+    def _pan_view(self, canvas_x: float, canvas_y: float) -> None:
+        if self._pan_last is None:
+            return
+        last_x, last_y = self._pan_last
+        self.view_origin_x += canvas_x - last_x
+        self.view_origin_y += canvas_y - last_y
+        self._pan_last = (canvas_x, canvas_y)
+        self.redraw_model()
+
+    def _zoom(self, factor: float, focus_x: float | None = None, focus_y: float | None = None) -> None:
         width = max(self.canvas.winfo_width(), 1)
         height = max(self.canvas.winfo_height(), 1)
-        center_x = width / 2
-        center_y = height / 2
+        center_x = width / 2 if focus_x is None else focus_x
+        center_y = height / 2 if focus_y is None else focus_y
         model_x, model_y = self._canvas_to_model(center_x, center_y)
         self.view_scale = max(5.0, min(self.view_scale * factor, 400.0))
         self.view_origin_x = center_x - model_x * self.view_scale

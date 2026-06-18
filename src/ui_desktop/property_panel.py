@@ -191,7 +191,15 @@ class PropertyPanel(ttk.LabelFrame):
         form.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         form.columnconfigure(1, weight=1)
 
-        self._combo(form, 0, "Type", self.element_type_var, ("frame", "truss"), self._set_member_settings)
+        self._combo(
+            form,
+            0,
+            "Type",
+            self.element_type_var,
+            ("frame", "truss"),
+            self._set_member_settings,
+            tooltip="Frame: axial + bending stiffness member. Truss: axial stiffness only.",
+        )
         self._combo(form, 1, "Material", self.material_var, self._material_ids(), self._set_member_settings)
         self._combo(form, 2, "Section", self.section_var, self._section_ids(), self._set_member_settings)
         self._combo(form, 3, "Draw mode", self.draw_mode_var, ("Click end node", "Length + angle"), self._set_draw_mode)
@@ -253,7 +261,7 @@ class PropertyPanel(ttk.LabelFrame):
                 ("Members", element_count),
             ]
         else:
-            rows = [("Selection", "Click a node or member.")]
+            rows = [("Selection", "Select a node or member to inspect and edit its properties.")]
 
         info = ttk.Frame(self)
         info.grid(row=1, column=0, sticky="ew", pady=(8, 0))
@@ -407,15 +415,19 @@ class PropertyPanel(ttk.LabelFrame):
         form.columnconfigure(1, weight=1)
         self._combo(form, 0, "Action", self.support_action_var, ("Add", "Replace", "Delete"), self._apply_support_settings)
         self._combo(form, 1, "Type", self.support_type_var, ("fixed", "pin", "roller_x", "roller_y", "custom"), self._sync_support_type)
-        ttk.Checkbutton(form, text="ux", variable=self.restrain_ux_var).grid(row=2, column=0, sticky="w")
-        ttk.Checkbutton(form, text="uy", variable=self.restrain_uy_var).grid(row=2, column=1, sticky="w")
-        ttk.Checkbutton(form, text="rz", variable=self.restrain_rz_var).grid(row=2, column=2, sticky="w")
-        ttk.Label(form, text="set ux").grid(row=3, column=0, sticky="w", pady=(8, 2))
-        ttk.Entry(form, textvariable=self.settlement_ux_var, width=10).grid(row=3, column=1, sticky="ew", pady=(8, 2))
-        ttk.Label(form, text="set uy").grid(row=4, column=0, sticky="w", pady=2)
-        ttk.Entry(form, textvariable=self.settlement_uy_var, width=10).grid(row=4, column=1, sticky="ew", pady=2)
-        ttk.Label(form, text="set rz").grid(row=5, column=0, sticky="w", pady=2)
-        ttk.Entry(form, textvariable=self.settlement_rz_var, width=10).grid(row=5, column=1, sticky="ew", pady=2)
+        ux_check = ttk.Checkbutton(form, text="ux", variable=self.restrain_ux_var)
+        ux_check.grid(row=2, column=0, sticky="w")
+        _attach_tooltip(ux_check, "Global horizontal displacement DOF.")
+        uy_check = ttk.Checkbutton(form, text="uy", variable=self.restrain_uy_var)
+        uy_check.grid(row=2, column=1, sticky="w")
+        _attach_tooltip(uy_check, "Global vertical displacement DOF.")
+        rz_check = ttk.Checkbutton(form, text="rz", variable=self.restrain_rz_var)
+        rz_check.grid(row=2, column=2, sticky="w")
+        _attach_tooltip(rz_check, "Out-of-plane rotational DOF.")
+        ux_label, ux_entry = _entry_row(form, 3, "set ux", self.settlement_ux_var, tooltip="Prescribed support settlement in the global X direction.")
+        uy_label, uy_entry = _entry_row(form, 4, "set uy", self.settlement_uy_var, tooltip="Prescribed support settlement in the global Y direction.")
+        rz_label, rz_entry = _entry_row(form, 5, "set rz", self.settlement_rz_var, tooltip="Prescribed rotational settlement about the global Z axis.")
+        _ = (ux_label, ux_entry, uy_label, uy_entry, rz_label, rz_entry)
         ttk.Button(self, text="Use These Settings", command=self._apply_support_settings).grid(row=2, column=0, sticky="ew", pady=(8, 0))
         ttk.Label(self, text="Click a node on the canvas to assign support.", wraplength=220).grid(row=3, column=0, sticky="nw", pady=(8, 0))
         ttk.Button(self, text="Reset to Default", command=self._reset_current_command).grid(row=4, column=0, sticky="ew", pady=(8, 0))
@@ -512,12 +524,9 @@ class PropertyPanel(ttk.LabelFrame):
         form.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         form.columnconfigure(1, weight=1)
         self._combo(form, 0, "Action", self.mass_action_var, ("Add", "Replace", "Delete"), self._apply_mass_settings)
-        ttk.Label(form, text="mass_ux").grid(row=1, column=0, sticky="w", pady=2)
-        ttk.Entry(form, textvariable=self.mass_ux_var, width=10).grid(row=1, column=1, sticky="ew", pady=2)
-        ttk.Label(form, text="mass_uy").grid(row=2, column=0, sticky="w", pady=2)
-        ttk.Entry(form, textvariable=self.mass_uy_var, width=10).grid(row=2, column=1, sticky="ew", pady=2)
-        ttk.Label(form, text="mass_rz").grid(row=3, column=0, sticky="w", pady=2)
-        ttk.Entry(form, textvariable=self.mass_rz_var, width=10).grid(row=3, column=1, sticky="ew", pady=2)
+        _entry_row(form, 1, "mass_ux", self.mass_ux_var, tooltip="Translational mass active in global X direction.")
+        _entry_row(form, 2, "mass_uy", self.mass_uy_var, tooltip="Translational mass active in global Y direction.")
+        _entry_row(form, 3, "mass_rz", self.mass_rz_var, tooltip="Rotational mass active about the global Z axis.")
         ttk.Button(self, text="Use These Settings", command=self._apply_mass_settings).grid(row=2, column=0, sticky="ew", pady=(8, 0))
         ttk.Label(self, text="Click a node on the canvas to assign mass.", wraplength=220).grid(row=3, column=0, sticky="nw", pady=(8, 0))
         ttk.Button(self, text="Reset to Default", command=self._reset_current_command).grid(row=4, column=0, sticky="ew", pady=(8, 0))
@@ -674,11 +683,15 @@ class PropertyPanel(ttk.LabelFrame):
     def _title(self, text: str) -> None:
         ttk.Label(self, text=text, font=("Segoe UI", 10, "bold")).grid(row=0, column=0, sticky="w")
 
-    def _combo(self, parent, row: int, label: str, variable, values, callback) -> None:
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=2)
+    def _combo(self, parent, row: int, label: str, variable, values, callback, tooltip: str | None = None) -> None:
+        label_widget = ttk.Label(parent, text=label)
+        label_widget.grid(row=row, column=0, sticky="w", pady=2)
         combo = ttk.Combobox(parent, textvariable=variable, values=tuple(values), state="readonly", width=14)
         combo.grid(row=row, column=1, sticky="ew", pady=2)
         combo.bind("<<ComboboxSelected>>", lambda event: callback())
+        if tooltip:
+            _attach_tooltip(label_widget, tooltip)
+            _attach_tooltip(combo, tooltip)
 
     def _add_node(self) -> None:
         try:
@@ -1502,9 +1515,9 @@ class SectionEditorDialog(tk.Toplevel):
         self.rect_widgets = _entry_row(dims, 0, "Depth", self.depth_var) + _entry_row(dims, 1, "Width", self.width_var)
         self.pipe_widgets = _entry_row(dims, 2, "Outside Diameter", self.diameter_var) + _entry_row(dims, 3, "Wall Thickness", self.thickness_var)
         self.generic_widgets = _entry_row(dims, 4, "A", self.a_var) + _entry_row(dims, 5, "I", self.i_var)
-        _entry_row(dims, 6, "Thermal depth d", self.d_var)
-        _entry_row(dims, 7, "EA direct", self.ea_var)
-        _entry_row(dims, 8, "EI direct", self.ei_var)
+        _entry_row(dims, 6, "Thermal depth d", self.d_var, tooltip="Used only for temperature-gradient loads.")
+        _entry_row(dims, 7, "EA direct", self.ea_var, tooltip="Uses direct stiffness values instead of deriving stiffness from E, A, and I.")
+        _entry_row(dims, 8, "EI direct", self.ei_var, tooltip="Uses direct stiffness values instead of deriving stiffness from E, A, and I.")
         ttk.Button(dims, text="Section Properties...", command=self._show_section_properties).grid(
             row=9,
             column=0,
@@ -1643,20 +1656,60 @@ class SectionPropertiesDialog(tk.Toplevel):
         ttk.Button(frame, text="OK", command=self.destroy).grid(row=3, column=0, columnspan=2, pady=(10, 0))
 
 
-def _entry_row(parent, row: int, label: str, variable) -> list:
+def _entry_row(parent, row: int, label: str, variable, tooltip: str | None = None) -> list:
     label_widget = ttk.Label(parent, text=label)
     entry_widget = ttk.Entry(parent, textvariable=variable, width=18)
     label_widget.grid(row=row, column=0, sticky="w", pady=2)
     entry_widget.grid(row=row, column=1, sticky="ew", pady=2)
+    if tooltip:
+        _attach_tooltip(label_widget, tooltip)
+        _attach_tooltip(entry_widget, tooltip)
     return [label_widget, entry_widget]
 
 
-def _readonly_combo(parent, row: int, label: str, variable, values, command=None) -> None:
-    ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=2)
+def _readonly_combo(parent, row: int, label: str, variable, values, command=None, tooltip: str | None = None) -> None:
+    label_widget = ttk.Label(parent, text=label)
+    label_widget.grid(row=row, column=0, sticky="w", pady=2)
     combo = ttk.Combobox(parent, textvariable=variable, values=values, state="readonly", width=20)
     combo.grid(row=row, column=1, sticky="ew", pady=2)
     if command is not None:
         combo.bind("<<ComboboxSelected>>", lambda _event: command())
+    if tooltip:
+        _attach_tooltip(label_widget, tooltip)
+        _attach_tooltip(combo, tooltip)
+
+
+def _attach_tooltip(widget, text: str) -> None:
+    state = {"window": None}
+
+    def _show(_event=None) -> None:
+        if state["window"] is not None:
+            return
+        try:
+            x = widget.winfo_rootx() + 18
+            y = widget.winfo_rooty() + widget.winfo_height() + 6
+        except tk.TclError:
+            return
+        window = tk.Toplevel(widget)
+        window.wm_overrideredirect(True)
+        window.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(window, text=text, relief="solid", borderwidth=1, padx=6, pady=4, background="#ffffe0", foreground="#202020")
+        label.pack()
+        state["window"] = window
+
+    def _hide(_event=None) -> None:
+        window = state.get("window")
+        if window is None:
+            return
+        state["window"] = None
+        try:
+            window.destroy()
+        except tk.TclError:
+            pass
+
+    widget.bind("<Enter>", _show, add="+")
+    widget.bind("<Leave>", _hide, add="+")
+    widget.bind("<Destroy>", _hide, add="+")
 
 
 def _next_named_id(items, prefix: str) -> str:

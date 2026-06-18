@@ -212,7 +212,7 @@ def plot_deformed_shape(
         raise ValueError("sub_segments must be a positive integer.")
 
     if ax is None:
-        _, ax = plt.subplots(figsize=(9, 6))
+        _, ax = plt.subplots(figsize=(9.2, 6.5))
 
     # --- Adaptive Auto-Scaling ---
     if scale_factor is None:
@@ -317,10 +317,11 @@ def plot_deformed_shape(
     _draw_hinges(ax, model)
 
     ax.set_aspect("equal", adjustable="box")
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
+    ax.set_xlabel("Global X")
+    ax.set_ylabel("Global Y")
     ax.set_title(f"Deformed Shape (Scale = {scale_factor:.1f}x)")
     ax.grid(True, linestyle=":", linewidth=0.6)
+    ax.margins(0.08)
 
     return ax
 
@@ -384,7 +385,7 @@ def plot_model_preview(
 ) -> tuple:
     """Plot model geometry, node/element labels, supports, and hinges."""
     if ax is None:
-        fig, ax = plt.subplots(figsize=(9, 6))
+        fig, ax = plt.subplots(figsize=(9.2, 6.5))
     else:
         fig = ax.figure
 
@@ -404,10 +405,11 @@ def plot_model_preview(
 
     _draw_hinges(ax, model)
     ax.set_aspect("equal", adjustable="box")
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
+    ax.set_xlabel("Global X")
+    ax.set_ylabel("Global Y")
     ax.set_title("Model Preview")
     ax.grid(True, linestyle=":", linewidth=0.6)
+    ax.margins(0.08)
     return fig, ax
 
 
@@ -429,6 +431,10 @@ def plot_static_deformed_shape(
         lc_id=getattr(results, "load_case_id", None),
         ax=ax,
     )
+    if scale_factor is not None:
+        ax.set_title(f"Static Deformed Shape (Scale = {scale_factor:.1f}x)")
+    else:
+        ax.set_title("Static Deformed Shape")
     return ax.figure, ax
 
 
@@ -876,7 +882,7 @@ def plot_static_nvm_diagram(
     if diagram_key not in labels:
         raise ValueError("diagram_key must be one of 'N', 'V', or 'M'.")
     if ax is None:
-        fig, ax = plt.subplots(figsize=(7, 6))
+        fig, ax = plt.subplots(figsize=(9.2, 6.5))
     else:
         fig = ax.figure
 
@@ -893,13 +899,21 @@ def plot_static_nvm_diagram(
         if element_id in nvm_data:
             _draw_element_diagram_from_nvm(ax, element, nvm_data[element_id], diagram_key, dynamic_scale, show_extrema=show_extrema)
 
-    ax.set_title(labels[diagram_key], fontsize=11, fontweight="bold")
+    ax.set_title(
+        {
+            "N": "Axial Force Diagram",
+            "V": "Shear Force Diagram",
+            "M": "Bending Moment Diagram",
+        }[diagram_key],
+        fontsize=11,
+        fontweight="bold",
+    )
     ax.set_aspect("equal")
     ax.grid(True, alpha=0.3)
-    ax.set_xlabel("X (m)")
-    ax.set_ylabel("Y (m)")
+    ax.set_xlabel("Global X (m)")
+    ax.set_ylabel("Global Y (m)")
     fig.suptitle(f"{labels[diagram_key]} - {getattr(results, 'load_case_id', '')}", fontsize=13, fontweight="bold")
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
     return fig, ax
 
 
@@ -912,7 +926,7 @@ def plot_static_nvm_diagrams(
 ):
     """Plot axial, shear, and moment diagrams from StaticResults.nvm_data."""
     if axes is None:
-        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+        fig, axes = plt.subplots(1, 3, figsize=(18, 6.5))
     else:
         fig = axes[0].figure
 
@@ -920,9 +934,13 @@ def plot_static_nvm_diagrams(
     y_coords = [node.y for node in model.nodes.values()]
     max_dim = max(max(x_coords) - min(x_coords), max(y_coords) - min(y_coords)) if x_coords and y_coords else 1.0
     nvm_data = getattr(results, "nvm_data", {}) or {}
-    labels = [("N", "Axial Force (N)"), ("V", "Shear Force (V)"), ("M", "Bending Moment (M)")]
+    labels = [
+        ("N", "Axial Force (N)", "Axial Force Diagram"),
+        ("V", "Shear Force (V)", "Shear Force Diagram"),
+        ("M", "Bending Moment (M)", "Bending Moment Diagram"),
+    ]
 
-    for ax, (key, label) in zip(axes, labels):
+    for ax, (key, label, title) in zip(axes, labels):
         _draw_structure(ax, model)
         max_value = max((abs(value) for data in nvm_data.values() for value in data.get(key, [])), default=1.0)
         dynamic_scale = scale if scale is not None else (0.15 * max_dim) / max_value if max_value > 0 else 1.0
@@ -931,14 +949,14 @@ def plot_static_nvm_diagrams(
             if element_id in nvm_data:
                 _draw_element_diagram_from_nvm(ax, element, nvm_data[element_id], key, dynamic_scale, show_extrema=show_extrema)
 
-        ax.set_title(label, fontsize=11, fontweight="bold")
+        ax.set_title(title, fontsize=11, fontweight="bold")
         ax.set_aspect("equal")
         ax.grid(True, alpha=0.3)
-        ax.set_xlabel("X (m)")
-        ax.set_ylabel("Y (m)")
+        ax.set_xlabel("Global X (m)")
+        ax.set_ylabel("Global Y (m)")
 
     fig.suptitle(f"NVM Diagrams - {getattr(results, 'load_case_id', '')}", fontsize=13, fontweight="bold")
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
     return fig, axes
 
 
@@ -978,8 +996,13 @@ def plot_mode_shape(
     )
     periods = getattr(results, "periods", []) or []
     period = periods[mode_index] if mode_index < len(periods) else None
-    suffix = f", T = {period:.3g} s" if period is not None else ""
-    ax.set_title(f"Mode Shape {mode_index + 1}{suffix}")
+    frequencies = getattr(results, "frequencies", []) or []
+    parts = [f"Mode Shape {mode_index + 1}"]
+    if mode_index < len(frequencies):
+        parts.append(f"f = {frequencies[mode_index]:.3g} Hz")
+    if period is not None:
+        parts.append(f"T = {period:.3g} s")
+    ax.set_title(" - ".join(parts))
     return ax.figure, ax
 
 
@@ -1009,7 +1032,7 @@ def plot_modal_mode_shape(
         if all(hasattr(value, "__len__") and not isinstance(value, (str, bytes)) for value in mode_shape.values()):
             displacements = {node_id: list(values)[:3] for node_id, values in mode_shape.items()}
             if ax is None:
-                fig, ax = plt.subplots(figsize=(9, 6))
+                fig, ax = plt.subplots(figsize=(9.2, 6.5))
             else:
                 fig = ax.figure
             plot_deformed_shape(model=model, displacements=displacements, scale_factor=scale_factor, show_undeformed=True, ax=ax)
@@ -1020,7 +1043,7 @@ def plot_modal_mode_shape(
                 parts.append(f"f = {frequencies[mode_index]:.3g} Hz")
             if mode_index < len(periods):
                 parts.append(f"T = {periods[mode_index]:.3g} s")
-            ax.set_title(", ".join(parts))
+            ax.set_title(" - ".join(parts))
             return fig, ax
         raise ValueError("Mode shape dictionary does not contain usable nodal or DOF data.")
 
