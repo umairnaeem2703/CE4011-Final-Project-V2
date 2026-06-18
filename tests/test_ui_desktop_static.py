@@ -982,7 +982,7 @@ def test_desktop_results_button_callback_handles_partial_viewer_state(monkeypatc
     window._refresh_static_result_table = lambda: refreshes.append("table")
     window._refresh_static_viewer = lambda: refreshes.append("viewer")
 
-    window._toolbar_action("Dynamic Results")
+    window._toolbar_action("Modal Results")
 
     assert refreshes == []
     assert selected_tabs == []
@@ -1184,7 +1184,7 @@ def test_desktop_results_workflow_initializes_individual_member_tab(monkeypatch)
 
 
 def test_desktop_static_complete_model_viewer_renders_plots(monkeypatch):
-    assert main_window.COMMAND_TABS[-1][1] == (("action", "Static Results"), ("action", "Dynamic Results"))
+    assert main_window.COMMAND_TABS[-1][1] == (("action", "Static Results"), ("action", "Modal Results"))
     window = _window_with_model()
 
     class DummyFrame:
@@ -1252,6 +1252,19 @@ def test_desktop_static_complete_model_viewer_renders_plots(monkeypatch):
     assert ("V", True) in calls
     assert ("M", True) in calls
     assert window.result_viewer_plot_canvases
+
+
+def test_desktop_final_scope_exposes_static_and_modal_only():
+    analyze_actions = main_window.COMMAND_TABS[-2][1]
+    result_actions = main_window.COMMAND_TABS[-1][1]
+
+    assert analyze_actions == (("action", "Run Static Analysis"), ("action", "Run Modal Analysis"))
+    assert result_actions == (("action", "Static Results"), ("action", "Modal Results"))
+    exposed_labels = " ".join(label for _kind, label in analyze_actions + result_actions)
+    assert "RSA" not in exposed_labels
+    assert "THA" not in exposed_labels
+    assert "Response Spectrum" not in exposed_labels
+    assert "Time History" not in exposed_labels
 
 
 def test_desktop_static_complete_model_viewer_empty_states(monkeypatch):

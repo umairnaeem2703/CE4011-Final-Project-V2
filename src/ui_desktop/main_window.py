@@ -95,7 +95,7 @@ COMMAND_TABS = (
         ),
     ),
     ("Analyze", (("action", "Run Static Analysis"), ("action", "Run Modal Analysis"))),
-    ("Results", (("action", "Static Results"), ("action", "Dynamic Results"))),
+    ("Results", (("action", "Static Results"), ("action", "Modal Results"))),
 )
 
 
@@ -391,7 +391,7 @@ class MainWindow:
         if name == "Static Results":
             self._show_static_results()
             return
-        if name == "Dynamic Results":
+        if name == "Modal Results":
             self._show_modal_results()
             return
         self._write_status(f"{name}: not wired yet.")
@@ -545,7 +545,7 @@ class MainWindow:
         if getattr(self, "latest_modal_result", None) is None:
             self._write_status("Run Modal Analysis first.")
             return
-        self._write_status("Dynamic Results opened.")
+        self._write_status("Modal Results opened.")
 
     def _create_results_window(self, mode: str = "static") -> tk.Toplevel:
         current_window = getattr(self, "result_viewer_window", None)
@@ -581,7 +581,7 @@ class MainWindow:
 
         if mode == "modal":
             dynamic_tab = ttk.Frame(body, padding=6)
-            body.add(dynamic_tab, text="Dynamic Results")
+            body.add(dynamic_tab, text="Modal Results")
             self.result_viewer_dynamic_tab = dynamic_tab
             self.result_viewer_table_tab = None
             self.result_viewer_shell_tab = None
@@ -743,7 +743,7 @@ class MainWindow:
         self.result_viewer_dynamic_top_controls = ttk.Frame(parent)
         self.result_viewer_dynamic_top_controls.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         self.result_viewer_dynamic_top_controls.columnconfigure(3, weight=1)
-        ttk.Label(self.result_viewer_dynamic_top_controls, text="Dynamic Results: Modal").grid(row=0, column=0, sticky="w")
+        ttk.Label(self.result_viewer_dynamic_top_controls, text="Modal Results").grid(row=0, column=0, sticky="w")
 
         mode_controls = ttk.Frame(self.result_viewer_dynamic_top_controls)
         mode_controls.grid(row=0, column=1, sticky="w", padx=(12, 0))
