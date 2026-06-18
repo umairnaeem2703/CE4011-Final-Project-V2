@@ -1,53 +1,70 @@
-# CE 4011 Structural Analysis Application
+# CE 4011 Static + Modal Structural Analysis MVP
 
-An educational 2D structural analysis application for building, solving, and visualizing truss, frame, beam, and benchmark models. The final submitted desktop scope is Static Analysis + Modal Analysis only. The project exposes the learning pipeline for those workflows: model input, DOF mapping, stiffness/mass assembly, solver execution, result objects, diagrams, and exportable intermediate data.
+Educational 2D structural analysis software for building, solving, visualizing, and exporting structural models. The final submitted desktop scope is the Tkinter MVP for Static Analysis and Modal Analysis.
 
-The final user-facing direction is a Tkinter desktop MVP. XML remains the backend save/load/export and reproducibility format; students are not expected to manually write XML. Blank, 2D Frame-Truss, and 2D Shear Frame workflows, canvas editing, templates, and table-style backup input all build models through `ModelBuilder`.
+Response Spectrum Analysis (RSA) and Time-History Analysis (THA) backend work may remain in the repository for future extension, but they are not part of the submitted desktop user-facing scope.
 
-## Implemented
+## Final Scope
 
-- Static analysis for 2D truss, frame, and beam-style models using assembled global stiffness matrices, reduced systems, displacements, reactions, element forces, and axial/shear/moment data.
-- Modal analysis with dynamic assembly, mass handling, eigenvalues, frequencies, periods, mode shapes, modal mass, participation factors, and effective modal mass outputs.
-- Backend Response Spectrum Analysis (RSA) and Time-History Analysis (THA) modules remain in the repository as future-extension work, but they are not part of the final submitted desktop workflow.
-- Educational intermediate outputs, including DOF maps, full and reduced matrices/vectors, solver inputs, solver outputs, and post-processing data for reports and tests.
-- XML parsing as the backend model format, including nodes, elements, supports, loads, masses, materials, sections, and analysis settings.
-- `ModelBuilder` as the only model creation path for programmatic, table, template, XML, and graphical input; builder-created models can be exported to XML and parsed back, including lumped masses.
-- A thin MVC-style controller layer that coordinates model building, validation, XML export, and analysis calls without owning solver math.
-- Shared structural validation through `StructuralValidator`.
-- Visualization and post-processing through matplotlib, including model preview, deformed shapes, axial/shear/moment diagrams, and mode shapes for the submitted desktop scope.
-- A legacy Streamlit local UI/dashboard for XML upload, table/form-based model input, static and dynamic analysis controls, cached results, and visualization display.
-- Focused pytest coverage for model input, static analysis, dynamic assembly, modal analysis, RSA, THA/Newmark, UI helpers, and visualization behavior.
+- 2D static analysis for frame, truss, beam-style, shear-frame, and benchmark models represented through the common model pipeline.
+- 2D modal analysis with mass assembly, massless-DOF handling, eigenvalues, frequencies, periods, mode shapes, participation factors, effective modal mass, and mass participation ratios.
+- Tkinter desktop MVP with model creation, canvas/table-backed editing workflows, Static and Modal analysis actions, result windows, plots, and result export.
+- XML save/load/export as the reproducibility format. Students use the desktop workflow; XML remains the backend interchange format.
+- Educational intermediate data for reports and verification: DOF maps, full/reduced matrices, force vectors, displacements, reactions, member forces, N/V/M data, modal matrices, and modal properties.
 
-## Under Development
+## Main Features
 
-- Tkinter desktop MVP with New Model workflows for Blank, 2D Frame-Truss, and 2D Shear Frame.
-- Canvas-based 2D model builder on top of `ModelBuilder`.
-- Static and Modal access from the desktop UI with embedded result plots and tables.
-- More complete export/report flows for classroom use.
-- Expanded templates and validation examples for common educational structures.
-- Final UI polish, result presentation, and end-to-end ergonomics.
-- Final documentation, manuals, and classroom-facing writeups.
+- `ModelBuilder`-backed model creation for programmatic, template, XML, table, and graphical input.
+- Shared `StructuralModel` data model for nodes, elements, materials, sections, supports, loads, masses, releases, and analysis settings.
+- Static solver workflow using assembled global stiffness and force data, boundary reduction, linear solve, reactions, member-end forces, and axial/shear/moment diagram data.
+- Modal solver workflow using assembled stiffness/mass data, active dynamic DOFs, condensation of stiffness-coupled massless DOFs, generalized eigenvalue solution, normalization, and modal participation reporting.
+- Matplotlib visualization for model preview, static deformed shapes, N/V/M diagrams, and modal mode shapes.
+- Focused pytest coverage for model input, static analysis, modal analysis, desktop UI helpers, XML workflows, and visualization behavior.
 
-## Architecture
+## Run The Desktop App
 
-The project follows a layered educational pipeline:
+From the repository root:
 
-```text
-Tkinter canvas/tables/templates/XML -> ModelBuilder -> StructuralModel -> DOF/K/M/C/F assembly -> solvers -> result objects -> embedded plots/tables/export
+```bash
+python -m src.ui_desktop.app
 ```
 
-Solvers operate on assembled matrices and vectors rather than branching by structure type. Structure families such as shear frames, cantilevers, frames, trusses, and benchmarks are represented as ordinary models or templates. `ModelBuilder` creates all `StructuralModel` instances for internal, table, template, XML, and graphical input, `StructuralValidator` checks model validity, and the controller remains a thin coordination layer. The solver, model input, XML, UI, and visualization responsibilities are kept separate so the numerical workflow remains transparent and testable.
+Use the desktop app to create or load a model, assign supports/properties/loads/masses, run Static or Modal analysis, inspect result tables/plots, and export visible result data.
 
-## Repository Map
+## Run Tests
 
-```text
-src/
-  flat module layout for parser, ModelBuilder, controller, validation
-  assembly, DOF, matrix, static, and modal solver modules; RSA/Newmark backend modules retained for future extension
-  result containers, post-processing, educational export, and visualization
-  ui/ Tkinter desktop MVP modules; legacy Streamlit dashboard modules may remain as prototypes
+Run the full test baseline:
 
-data/      XML examples and schema material
-tests/     focused unit, integration, UI-helper, and visualization tests
-results/   generated reports and figures when analyses are run locally
+```bash
+pytest tests/
 ```
+
+For focused checks during maintenance, run only tests related to the changed module. Example:
+
+```bash
+pytest tests/test_static.py tests/test_modal_solver.py
+```
+
+## Example Data And Outputs
+
+- `data/`: XML models, schema/reference input files, and small text fixtures.
+- `sap2000_solutions/`: SAP2000 comparison exports used by strict validation tests.
+- `modal_solution/`: modal-analysis reference material.
+- `docs/`: assignment/reference documentation and archived development notes.
+- Runtime result exports are generated by the app or tests in the selected output location.
+
+## Documentation
+
+- `ARCHITECTURE.md`: final architecture and module-layer map.
+- `MATH_SPEC.md`: Static + Modal mathematical contract.
+- `CHANGES.md`: final changelog summary.
+- `AGENTS.md`: concise maintenance rules for future development.
+- `docs/development_archive/`: preserved phase/process history.
+
+## Limitations And Future Work
+
+- Final desktop scope is Static + Modal only.
+- RSA and THA are deferred future desktop workflows.
+- Legacy/prototype UI modules may remain in the repository but are not the submitted MVP path.
+- PDF/report automation and expanded classroom manuals are future documentation/export tasks.
+- Numerical core should remain transparent and standard-library oriented unless a dependency is explicitly approved.

@@ -230,7 +230,7 @@ class TestTemperatureBenchmark(StrictSAP2000TestBase):
 
     def test_temperature_displacements_reactions_and_member_end_forces(self):
         xml_path = os.path.join(os.path.dirname(__file__), "../data/test-temperature.xml")
-        sap_path = os.path.join(os.path.dirname(__file__), "../sap2000/test-temperature-results.txt")
+        sap_path = os.path.join(os.path.dirname(__file__), "../sap2000_solutions/test-temperature-results.txt")
 
         sap_parser = SAP2000Parser(sap_path)
         sap_disp, sap_react, _ = sap_parser.parse()

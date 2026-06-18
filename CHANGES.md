@@ -1,136 +1,56 @@
-This file is an implementation specification, not a brainstorming document. Codex must implement only the listed items and must not broaden the task into visual polish, controller refactoring, solver changes, XML schema changes, or RSA/THA UI work.
+# CHANGES.md
 
-Read `AGENTS.md`, `PHASE_4_COMPLETION_AUDIT.md`, `PHASE_5.md`, and only the Tkinter desktop files needed for this task, especially:
+## Final Submission Summary
 
-* `src/ui_desktop/main_window.py`
-* `src/ui_desktop/property_panel.py`
-* `src/ui_desktop/canvas.py`
-* `src/ui_desktop/template_dialog.py`
-* `src/ui_desktop/object_tree.py`
-* any result-viewer/helper files directly referenced by `main_window.py`
+This repository has been consolidated around the CE 4011 final desktop MVP scope: Static Analysis and Modal Analysis in a Tkinter application, with XML save/load/export, educational result data, visualization, and focused validation tests.
 
-Task: Final desktop architecture cleanup for the revised Static + Modal submission scope.
+## Architecture
 
-Context:
-The final submitted project scope is:
+- Preserved the flat `src/` layout while documenting logical layers for model input, validation, assembly, solvers, results, visualization, export, and UI.
+- Standardized the project pipeline around `ModelBuilder -> StructuralModel -> assembly -> solver -> result object -> plots/tables/export`.
+- Kept solver math out of UI and controller code.
+- Preserved XML as the reproducibility and interchange backend.
 
-* Static Analysis
-* Modal Analysis
+## Static Analysis
 
-RSA and THA are deferred/future work and must not be exposed in the submitted desktop UI.
+- Supports assembled global stiffness and force workflows for 2D frame/truss/beam-style models.
+- Preserves educational intermediate data including DOF maps, full/reduced stiffness matrices, force vectors, displacements, reactions, member-end forces, and N/V/M diagram data.
+- Includes visualization for model preview, deformed shape, and axial/shear/moment diagrams.
 
-Important rules:
+## Modal Analysis
 
-* Do not change solver math.
-* Do not change static/modal result dataclasses unless strictly necessary.
-* Do not change XML schema.
-* Do not touch `src/controller.py`.
-* Preserve the current flat `src/` layout.
-* Keep changes focused and preferably under 5 files.
-* Do not clean result aliases such as `latest_static_results/latest_static_result` or `latest_modal_results/latest_modal_result` unless existing tests clearly cover the change.
-* Do not add PDF/report automation.
-* Do not refactor the whole UI.
+- Adds dynamic assembly and modal analysis over the common model pipeline.
+- Reports eigenvalues, frequencies, periods, mode shapes, modal masses, participation factors, effective modal masses, and mass participation ratios.
+- Handles massless stiffness-coupled DOFs through condensation before modal analysis.
+- Provides modal summaries, matrix views, and mode-shape visualization in the desktop result workflow.
 
-Implement the following UI cleanup decisions:
+## Desktop MVP
 
-1. New Model workflow
+- Provides a Tkinter desktop workflow for creating/editing models, assigning properties/supports/loads/masses, running Static and Modal analyses, and reviewing results.
+- Canvas/table/template/XML workflows are intended to go through `ModelBuilder`.
+- Static and Modal result windows are the final user-facing analysis surfaces.
+- RSA and THA desktop workflows are deferred future work and are not part of the submitted UI scope.
 
-   * Expose only:
+## Results And Export
 
-     * `Blank Model`
-     * `2D Shear Frame Template`
-   * Remove or rename the vague `2D General Structure` option.
-   * `Blank Model` should create the existing seeded blank/general builder behavior if that is how the current app starts a usable empty model.
-   * Do not add a 2D Frame-Truss template unless it already exists cleanly and is already wired.
+- Result windows expose educational tables and plots.
+- XML model export remains the model persistence path.
+- Visible result tables and plots can be exported where implemented for classroom review.
 
-2. Stale result invalidation
+## Validation And Tests
 
-   * When the model is edited after analysis, automatically clear old static and modal results.
-   * This includes edits such as node/member creation, deletion, movement, replication, coordinate edits, supports, loads, masses, diaphragms, material/section/member property changes, and XML/new model loading.
-   * After clearing, any open result window should refresh to a clear message such as:
-     `Results were cleared because the model changed. Run analysis again.`
-   * Static Results should no longer show old static results after model edits.
-   * Modal Results should no longer show old modal results after model edits.
-   * If the model already has dirty-state handling, reuse it. Do not create a parallel heavy cache system.
+- The test suite covers model building, XML parsing/export behavior, static analysis, modal analysis, UI helpers, visualization, and benchmark/reference comparisons.
+- Reference SAP2000 exports are stored under `sap2000_solutions/`.
 
-3. View menu cleanup
+## Documentation Cleanup
 
-   * Remove the visible disabled `Window Select` item from the View menu.
-   * Do not remove the internal canvas window-selection behavior if it is already working.
+- Root documentation is limited to final-facing files: `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, `MATH_SPEC.md`, and `CHANGES.md`.
+- Phase plans, startup guides, patch summaries, and process history are preserved under `docs/development_archive/`.
+- Assignment/reference documentation remains under `docs/` for validation and background context.
 
-4. Move workflow cleanup
+## Future Work
 
-   * Remove `Move Selection` as a separate Edit menu command.
-   * Fold move controls into `Select / Inspect`.
-   * Expose dx/dy move controls in the selected-object inspector/property panel.
-   * Keep existing movement behavior if possible; only change how the user reaches it.
-   * Do not break coordinate editing or replication.
-
-5. Top-level Results menu
-
-   * Keep only:
-
-     * `Static Results`
-     * `Modal Results`
-   * Do not add top-level result entries for deformed shape, N/V/M, mode shapes, or matrices.
-   * Those should remain inside the Static Results or Modal Results windows.
-
-6. Result-window exports
-
-   * Add export actions inside the relevant result windows, not as a new global Export menu.
-   * Required export types:
-
-     * XML model export is already handled by Save XML; leave it as is.
-     * TXT and/or CSV export for visible result tables.
-     * PNG export for visible plots.
-   * Static result window should support exporting currently visible static table data to TXT/CSV where practical.
-   * Modal result window should support exporting currently visible modal table data to TXT/CSV where practical.
-   * Plot views should support exporting the current plot to PNG where practical.
-   * Keep export behavior simple and classroom-oriented. Do not add PDF generation.
-
-7. Material/section workflow
-
-   * Do not deeply refactor material/section assignment now.
-   * Only make minimal label/wording cleanup if needed for clarity.
-   * Do not redesign dialogs.
-
-8. Validation behavior
-
-   * Do not perform a broad validation refactor in this task.
-   * If analysis already runs without automatic validation, leave major validation changes for a separate prompt unless a small non-invasive check is already available.
-   * Do not introduce solver-side changes.
-
-Tests/checks:
-
-* Add or update focused UI tests where practical for:
-
-  * New Model options expose `Blank Model` and `2D Shear Frame Template`.
-  * `Window Select` is no longer visible in View.
-  * `Move Selection` is no longer a separate Edit command.
-  * Static/modal results are cleared after a representative model edit.
-  * Static Results and Modal Results remain available as top-level results actions.
-* Run:
-
-  * `python -m py_compile` on modified Python files
-  * focused desktop UI tests
-  * relevant static/modal UI tests
-* Do not require full `pytest tests/` to pass if there are known unrelated pre-existing failures, but report them clearly.
-
-Report:
-
-* Changed files.
-* UI actions removed/renamed.
-* How stale-result clearing works.
-* Export actions added and their formats.
-* Tests run and results.
-* Any limitations left for final submission.
-
-
-Out of scope:
-- controller.py refactor
-- solver math changes
-- XML schema changes
-- RSA/THA desktop UI exposure
-- PDF/report automation
-- visual theme polish
-- broad material/section workflow redesign
+- Finalize classroom user manuals and step-by-step examples.
+- Expand validation examples and expected-output notes.
+- Add polished report/PDF workflows if required.
+- Promote RSA/THA from backend/future work to desktop UI only if the project scope is formally expanded.

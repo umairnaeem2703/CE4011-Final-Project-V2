@@ -1,331 +1,122 @@
 # ARCHITECTURE.md
 
 ## Target
-Python OOP structural analysis program for the final submitted desktop scope: 2D static analysis and modal analysis. RSA and THA backend modules may remain in the repository, but response-spectrum and time-history desktop workflows are future extensions outside the final submission. The engine must be transparent for education and expose intermediate matrices/results.
+
+The project is a Python educational structural analysis application for the submitted desktop MVP scope: 2D Static Analysis and 2D Modal Analysis. The application emphasizes transparent intermediate data, a Tkinter model-building workflow, XML reproducibility, and plots/tables suitable for classroom review.
+
+RSA and THA code may remain in the repository as future-extension work, but response-spectrum and time-history workflows are not part of the final submitted desktop scope.
 
 ## Pipeline
+
 ```text
-Input/UI -> Model -> DOF/Assembly -> Solver -> Results -> Visualization/Export
+Desktop/table/template/XML input
+  -> ModelBuilder
+  -> StructuralModel
+  -> DOF mapping and matrix/vector assembly
+  -> Static or Modal solver
+  -> result objects
+  -> Tkinter tables, matplotlib plots, export
 ```
 
-## Package Layout
+Solvers are generalized. They receive assembled matrices/vectors and do not branch by structure family. Frames, trusses, shear frames, cantilevers, and benchmark problems are ordinary models or templates.
+
+## Current Physical Layout
+
+The repository intentionally keeps a mostly flat `src/` layout. Logical layers are mapped to files/modules rather than package folders.
+
 ```text
 src/
-  core/              # matrix, linear solver, eigen, interpolation, errors
-  model/             # StructuralModel, Node, Material, Section, Support, Load, Mass
-  elements/          # ElementBase, Truss2D, Beam2D/Frame2D, Spring
-  assembly/          # DOFManager, K/M/C/load assembly, boundary reduction
-  solvers/           # Static, Modal; RSA/Newmark retained as future-extension backend work
-  results/           # StaticResults, ModalResults; RSAResults/THAResults retained for future extension
-  io/                # CSV/XML/JSON read-write, report/export helpers
-  templates/         # shear frame, cantilever, portal frame examples
-  visualization/     # matplotlib figures only
-  ui/                # Tkinter desktop MVP views, canvas builder, result panels
-tests/
+  parser.py                  StructuralModel and XML parsing dataclasses/helpers
+  model_builder.py           Programmatic/template/UI/XML-backed model construction
+  structural_validator.py    Shared validation checks
+  controller.py              Thin coordination layer
+  dof_optimizer.py           DOF numbering, free/restrained/active dynamic DOFs
+  element_physics.py         Element stiffness, transformations, fixed-end effects
+  matrix_assembly.py         Global stiffness/load assembly and reduction support
+  dynamic_assembly.py        Mass/damping/dynamic matrix assembly
+  banded_solver.py           Static linear solve support
+  modal_solver.py            Modal eigenproblem, normalization, modal properties
+  results.py                 Static/Modal result containers and related data
+  post_processor.py          Reactions, member forces, N/V/M recovery
+  visualizer.py              Matplotlib model/result plots
+  educational_exporter.py    Text-oriented educational exports
+  ui/                        Legacy/prototype UI helpers
+  ui_desktop/                Tkinter desktop MVP shell, canvas, panels, result views
 ```
 
-## Responsibilities
-- `StructuralModel`: stores nodes, elements, supports, loads, masses, analysis settings, dirty state, cached matrices.
-- `ElementBase`: local stiffness/mass, transformation, global matrices, force recovery.
-- `DOFManager`: global DOF map, free/restrained DOFs, reduced mapping. Default node DOFs: `[ux, uy, rz]`.
-- Assemblers: build global `K`, `M`, `C`, `F`, `P(t)` and reduced systems.
-- Solvers: operate only on assembled matrices/vectors/settings.
-- Results: dataclass-style containers; no loose arrays.
-- Templates: generate ordinary `StructuralModel` objects only.
-- UI: no analysis math; calls engine and displays results.
+## Layer Responsibilities
 
----
+- Model/input layer: `parser.py`, `model_builder.py`, and XML helpers define and create models.
+- Validation layer: `structural_validator.py` centralizes structural validity checks.
+- Assembly layer: `dof_optimizer.py`, `element_physics.py`, `matrix_assembly.py`, and `dynamic_assembly.py` create the numerical systems.
+- Solver layer: `banded_solver.py`, static analysis helpers, and `modal_solver.py` solve assembled systems only.
+- Results/post-processing layer: `results.py` and `post_processor.py` preserve intermediate data, reactions, element forces, and diagram values.
+- Visualization/export layer: `visualizer.py`, result windows, and export helpers consume models plus result objects.
+- UI layer: `ui_desktop/` gathers user input and displays results. It does not implement solver math.
 
-## Solver Contracts
-```text
-Static:  K u = F
-Modal:   K phi = lambda M phi
-Dynamic: M u_ddot + C u_dot + K u = P(t)
-EQ THA:  P(t) = -M r ag(t)
-```
-
----
-
-## Result Object Contracts (Dataclass Sketches)
-
-These define what each solver produces. Implement in Phase corresponding to each solver.
-
-### StaticResults (Phase 2)
-```python
-@dataclass
-class StaticResults:
-    """Static analysis output."""
-    K: list  # Full global stiffness matrix (n_dof x n_dof)
-    Kff: list  # Reduced stiffness for free DOFs (n_free x n_free)
-    F: list  # Full load vector (n_dof x 1)
-    Ff: list  # Reduced load vector for free DOFs (n_free x 1)
-    
-    displacements: dict  # {node_id: [ux, uy, rz]} (full, includes prescribed)
-    reactions: dict  # {node_id: [Fx, Fy, Mz]} at supports
-    
-    # Element forces in local coordinates
-    element_forces: dict  # {element_id: [N/Ni, V/Vi, M/Mi, N/Nj, V/Vj, M/Mj]}
-    
-    # NVM data (for diagrams)
-    nvm_data: dict  # {element_id: {"N": [...], "V": [...], "M": [...]}}
-    
-    dof_map: dict  # {node_id: [dof_ux, dof_uy, dof_rz]}
-    load_case_id: str
-```
-
-### DynamicAssemblyData (Phase 3)
-```python
-@dataclass
-class DynamicAssemblyData:
-    """Dynamic assembly output and educational intermediate data."""
-    K: list  # Full global stiffness matrix (n_dof x n_dof)
-    M: list  # Full global mass matrix (n_dof x n_dof)
-    C: list  # Full global damping matrix (n_dof x n_dof)
-
-    Kff: list  # Condensed dynamic stiffness matrix on active dynamic DOFs
-    Mff: list  # Condensed mass matrix on active dynamic DOFs
-    Cff: list  # Condensed damping matrix on active dynamic DOFs
-
-    dof_map: dict
-    free_dofs: list
-    active_dynamic_dofs: list
-    condensed_massless_dofs: list
-    unit_system: str
-
-    rayleigh_alpha: float
-    rayleigh_beta: float
-```
-
-Notes:
-- `Kff` is the condensed dynamic stiffness matrix produced by massless-DOF condensation, not merely a raw submatrix of the full `K`.
-- `active_dynamic_dofs` identifies the DOFs retained for dynamic analysis after removing zero-mass or massless stiffness-coupled DOFs as required.
-
----
-
-### ModalResults (Phase 4)
-```python
-@dataclass
-class ModalResults:
-    """Modal analysis output."""
-    K: list  # Full global stiffness (n_dof x n_dof)
-    M: list  # Full global mass (n_dof x n_dof)
-    
-    eigenvalues: list  # lambda (omega^2) values, ascending order
-    frequencies: list  # f (Hz)
-    periods: list  # T (seconds)
-    
-    # Mode shapes, mass-orthonormalized: phi^T M phi = I
-    mode_shapes: list  # [phi_0, phi_1, ...] each is (n_dof x 1)
-    
-    # Modal properties
-    modal_masses: list  # M_modal,n = phi_n^T M phi_n (should be ~1.0 if normalized)
-    participation_factors: list  # Gamma_n = phi_n^T M r / M_modal,n
-    effective_masses: list  # M_eff,n = Gamma_n^2
-    mass_participation_ratios: list  # M_eff,n / (r^T M r)
-    
-    # For reference
-    influence_vector: list  # r (e.g., [1,0,0,1,0,0,...] for horizontal excitation)
-    total_participating_mass: float  # sum(M_eff,n) or r^T M r
-    
-    num_modes_requested: int
-    num_modes_extracted: int
-```
-
-### THAResults (Phase 5)
-```python
-@dataclass
-class THAResults:
-    """Time-History Analysis output."""
-    time_vector: list  # t values (seconds)
-    excitation_history: list  # ag(t) values (input acceleration, m/s^2)
-    applied_force_history: list  # P(t) = -M r ag(t) values
-    
-    # Response histories (n_steps x n_dof)
-    displacement_history: list  # u(t)
-    velocity_history: list  # u_dot(t)
-    acceleration_history: list  # u_ddot(t)
-    
-    # Base response histories
-    base_shear_history: list  # V_base(t)
-    overturning_moment_history: list  # OTM(t)
-    
-    # Peak response quantities (for summary)
-    peak_displacement: dict  # {dof: max_absolute_value}
-    peak_velocity: dict
-    peak_acceleration: dict
-    peak_base_shear: float
-    peak_overturning_moment: float
-    
-    # Step table (optional, for reporting a few key time steps)
-    step_table: list  # [(t, u, v, a, V_base, OTM), ...] sample steps
-    
-    # Newmark parameters used
-    damping_ratio: float  # zeta
-    dt: float  # time step
-    num_steps: int
-    
-    # Ground motion source metadata
-    source_file: str  # path to the ground motion file used as input
-    acceleration_unit: str  # unit of input acceleration (e.g. "m/s2", "cm/s2", "mm/s2", "g")
-    scale_factor: float  # user-specified scale factor applied to the raw acceleration values
-    input_format: str  # "acceleration_only" or "time_acceleration"
-```
-
-### Ground Motion Input Contract (also Phase 5)
-
-Create a backend ground-motion reader before UI implementation.
-
-Supported input formats:
-- acceleration_only: one acceleration value per line, dt supplied by user
-- time_acceleration: two columns, time column + acceleration column
-- optional header/metadata lines skipped by user setting
-
-GroundMotionConfig:
-- file_path
-- input_format: "acceleration_only" or "time_acceleration"
-- time_step_dt
-- time_column
-- acceleration_column
-- first_line
-- last_line
-- skip_header_lines
-- acceleration_unit: "m/s2", "cm/s2", "mm/s2", "g"
-- scale_factor
-- excitation_direction: "x" or "y"
-
-GroundMotionRecord:
-- time_vector
-- acceleration_raw
-- acceleration_si
-- dt
-- num_steps
-- source_file
-- acceleration_unit
-- scale_factor
-
-Internal solver acceleration must use m/s².
----
-
-### RSAResults (Phase 6)
-```python
-@dataclass
-class RSAResults:
-    """Response Spectrum Analysis output."""
-    spectrum_periods: list  # T values (seconds)
-    spectrum_accelerations: list  # Sa(T) values (m/s^2 or g)
-    
-    # Modal data
-    num_modes: int
-    periods: list  # T_n for each mode
-    
-    # Response quantities per mode (before combination)
-    modal_response_vectors: list  # {mode_n: {dof: response_value}}
-    modal_base_shears: list  # V_base,n per mode
-    modal_overturning_moments: list  # OTM_n per mode
-    
-    # Combined response (SRSS or CQC)
-    combination_method: str  # "SRSS" or "CQC"
-    combined_response: dict  # {dof: combined_value}
-    combined_base_shear: float
-    combined_overturning_moment: float
-    
-    # CQC coupling coefficients (if used)
-    rho_matrix: list  # (n_modes x n_modes) coupling factors
-    
-    damping_ratio: float  # zeta (%)
-```
-
-## Reserved Model Attributes (Implement in Phase Indicated)
-
-Add these to `StructuralModel` definition for future phases:
-
-```python
-# Phase 1/Core
-self.is_dirty: bool = True  # Mark model as needing rebuild
-
-# Phase 2 (Static Assembly)
-self.cached_dof_map: dict = None
-self.cached_K: list = None
-self.cached_F: list = None
-self.cached_Kff: list = None
-self.cached_Ff: list = None
-
-# Phase 3 (Dynamic Assembly)
-self.cached_M: list = None
-self.cached_C: list = None
-self.damping_model: str = "rayleigh"  # or "modal", "none"
-self.rayleigh_alpha: float = 0.0
-self.rayleigh_beta: float = 0.0
-
-# Phase 5+ (THA)
-self.excitation_file: str = None  # path to ground motion
-self.excitation_direction: str = "x"  # or "y", "z"
-self.time_step: float = 0.01
-self.num_steps: int = 0
-
-def mark_dirty(self):
-    """Called whenever input changes (geometry, loads, supports)."""
-    self.is_dirty = True
-    self.cached_K = None
-    self.cached_M = None
-    self.cached_C = None
-    self.cached_dof_map = None
-```
-
----
-
-## Dependency Checks (Implement in Each Phase)
-
-Phase solvers must validate that prior phases completed. Examples:
-
-```python
-# In modal_solver.py (Phase 4)
-def validate_phase_3_complete(model):
-    """Verify mass matrix is assembled before modal analysis."""
-    assert hasattr(model, 'M') and model.M is not None, \
-        "Phase 3 incomplete: mass matrix not assembled. Run assembly first."
-    assert len(model.M) == model.num_dofs, \
-        "Mass matrix shape mismatch."
-
-# In rsa_solver.py (Phase 6)
-def validate_phase_4_complete(results_modal):
-    """Verify modal results exist before RSA."""
-    assert results_modal is not None, \
-        "Phase 4 incomplete: run modal analysis first."
-    assert len(results_modal.periods) > 0, \
-        "No modal periods extracted."
-```
-
----
-
-## UI Flow (Phase 8)
+## Static Workflow
 
 ```text
-New Model (Blank / 2D Frame-Truss / 2D Shear Frame)
-  -> Tkinter canvas/table edits
-  -> ModelBuilder
-  -> validate -> mark model dirty
-  -> rebuild model/DOFs (if needed, check is_dirty) 
-  -> run selected analysis (static/modal) 
-  -> cache results 
-  -> embedded plots/tables
-  -> XML save/load/export
+ModelBuilder/XML/UI input
+  -> StructuralModel
+  -> StructuralValidator
+  -> DOFManager/DOFOptimizer
+  -> assemble K and F
+  -> apply boundary reduction: Kff uf = Ff
+  -> solve displacements
+  -> recover full displacement vector, reactions, member-end forces
+  -> compute N/V/M data
+  -> StaticResults
+  -> tables, deformed shape, member diagrams, export
 ```
 
-On subsequent runs, if input unchanged, reuse cached matrices.
+Static results preserve the full and reduced systems (`K`, `Kff`, `F`, `Ff`), DOF map, nodal displacements, support reactions, member-end forces, and N/V/M diagram data.
 
-The desktop UI is responsible for collecting geometry, supports, properties, loads,
-and masses; all model creation flows go through `ModelBuilder`. XML is the backend
-persistence/export format, not a manual input requirement for students. Static and
-Modal analyses must be accessible from the final desktop UI, with plots and
-educational result tables embedded in the application. RSA and THA controls/results
-are reserved for future extension.
+## Modal Workflow
 
----
+```text
+ModelBuilder/XML/UI input with masses
+  -> StructuralModel
+  -> StructuralValidator
+  -> DOF and dynamic assembly
+  -> build K/M and reduced or condensed Kff/Mff
+  -> condense massless stiffness-coupled DOFs where required
+  -> solve K phi = lambda M phi
+  -> normalize mode shapes
+  -> compute frequencies, periods, participation factors, effective modal mass
+  -> ModalResults
+  -> modal summary, mode-shape plot, modal matrices, export
+```
 
-## Non-Negotiables
-- General static and dynamic solvers.
-- No duplicated solver logic by structure type.
-- No solver math in UI or plotting.
-- Preserve sign conventions and intermediate outputs.
-- Result objects are dataclasses; solvers populate them completely before returning.
+Modal analysis must not delete stiffness-coupled massless DOFs as a shortcut. They are statically condensed before the eigenproblem. Disconnected zero-mass DOFs may be removed when they do not affect stiffness transfer.
+
+## Desktop UI Workflow
+
+The Tkinter desktop MVP provides model creation and editing, Static/Modal analysis commands, result windows, embedded plots, and visible table/plot export. Canvas/table/template actions should call `ModelBuilder` rather than constructing parser dataclasses directly.
+
+When model data changes after analysis, cached Static and Modal results should be cleared or marked stale so the UI does not display old results as current.
+
+## XML Workflow
+
+XML is the persistence and reproducibility backend:
+
+- Save/export a desktop-created model to XML.
+- Load XML into the same `ModelBuilder`/`StructuralModel` pipeline.
+- Preserve analysis-relevant model data such as geometry, supports, releases, loads, masses, materials, and sections.
+
+Students should be able to use the desktop workflow without manually writing XML.
+
+## Visualization And Export
+
+Plotting consumes a model plus result object. Required final-scope plots are:
+
+- model preview
+- static deformed shape
+- axial/shear/moment diagrams
+- modal mode shapes
+
+Result windows may export visible result tables as text/CSV and visible plots as PNG where practical. XML model export remains the model persistence path.
+
+## Future Extensions
+
+RSA and THA are future desktop workflows. Any future implementation should reuse the same pipeline: assemble matrices, run generalized solvers, return result objects, then visualize/export through the UI without moving solver math into UI code.
