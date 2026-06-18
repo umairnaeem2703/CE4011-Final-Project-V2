@@ -1,370 +1,294 @@
 # MATH_SPEC.md
 
 ## Scope
-Mathematical contract for static, modal, RSA, and THA solvers. Keep solvers generalized: every model becomes matrices/vectors before analysis.
 
----
+This document is the final mathematical contract for the submitted Static + Modal desktop MVP. All structure types are reduced to common DOF maps, matrices, vectors, and result objects before solving.
 
-## DOFs
-2D frame node DOFs:
+RSA and THA are deferred future extensions and are not part of the submitted desktop analysis scope.
+
+## Degrees Of Freedom
+
+Each 2D node uses:
+
 ```text
 [ux, uy, rz]
 ```
-Two-node frame element DOFs:
+
+Each 2D frame element uses:
+
 ```text
 [ux_i, uy_i, rz_i, ux_j, uy_j, rz_j]
 ```
-`DOFManager` returns `global_dof_map`, `free_dofs`, `restrained_dofs`, `active_dynamic_dofs`.
 
----
+The DOF layer provides the global DOF map, free DOFs, restrained DOFs, and active dynamic DOFs for modal analysis.
 
-## Transformation
-For element length `L`, direction cosines `c = cos(θ)`, `s = sin(θ)`:
+## Coordinate Transformation
+
+For an element of length `L` with direction cosines `c = cos(theta)` and `s = sin(theta)`:
+
 ```text
 q_local = T q_global
 k_global = T^T k_local T
 m_global = T^T m_local T
 ```
 
----
+Element local axes run from node `i` to node `j`.
 
-## Stiffness (Phase 2)
+## Element Stiffness
 
-### Truss/Bar
-```text
-k = EA/L * [[1,-1],[-1,1]]
-```
-
-### Frame2D (Euler-Bernoulli)
-Local 6×6 stiffness:
-```text
-[k_axial       0          0       -k_axial      0          0      ]
-[0        12EI/L^3   6EI/L^2      0      -12EI/L^3  6EI/L^2   ]
-[0        6EI/L^2    4EI/L       0      -6EI/L^2   2EI/L    ]
-[-k_axial     0          0       k_axial       0          0      ]
-[0       -12EI/L^3  -6EI/L^2      0       12EI/L^3  -6EI/L^2  ]
-[0        6EI/L^2    2EI/L       0      -6EI/L^2   4EI/L    ]
-```
-where `k_axial = EA/L`.
-
----
-
-## Assembly (Phase 2–3)
-
-For each element, compute local stiffness and mass, transform to global, then scatter into global matrix:
-```text
-For each element's global DOF index pairs (Ia, Ib):
-  K[Ia,Ib] += k_element_global[a,b]
-  M[Ia,Ib] += m_element_global[a,b]  (Phase 3)
-```
-
-### Massless DOF Condensation
+### Truss Or Bar
 
 ```text
-K_eff = Kaa - Kam Kmm^-1 Kma
-M_eff = Maa
-C_eff = alpha*M_eff + beta*K_eff
+k = EA/L * [[1, -1],
+            [-1, 1]]
 ```
 
-This is a mathematical design decision for the spec and governs how massless stiffness-coupled DOFs are reduced before modal analysis.
+### 2D Euler-Bernoulli Frame
 
-### Boundary Reduction
-For fixed (restrained) DOFs, partition and solve reduced free system:
+Local 6 by 6 stiffness:
+
 ```text
-[Kff  Kfr ] [uf ]   [Ff]
-[Krf  Krr ] [ur ] = [Fr]
-
-Kff uf = Ff - Kfr ur_prescribed
+[ EA/L       0          0       -EA/L       0          0      ]
+[ 0     12EI/L^3   6EI/L^2      0    -12EI/L^3   6EI/L^2 ]
+[ 0      6EI/L^2   4EI/L        0     -6EI/L^2   2EI/L   ]
+[-EA/L       0          0        EA/L       0          0      ]
+[ 0    -12EI/L^3  -6EI/L^2      0     12EI/L^3  -6EI/L^2 ]
+[ 0      6EI/L^2   2EI/L        0     -6EI/L^2   4EI/L   ]
 ```
 
-Preserve both full and reduced matrices in results for educational transparency.
+Member releases and hinged-node effects are handled through the existing element/release condensation behavior before assembly.
 
----
+## Global Assembly
 
-## Static (Phase 2)
+For each element:
+
+```text
+compute k_local
+transform to k_global
+scatter into K using global DOF indices
+assemble equivalent nodal loads into F where applicable
+```
+
+For modal analysis, mass terms are also assembled:
+
+```text
+compute or collect element/nodal mass
+transform m_local to m_global where needed
+scatter into M using global DOF indices
+```
+
+The implementation preserves full and reduced matrices/vectors for educational output.
+
+## Boundary Reduction
+
+Partition the static system into free and restrained DOFs:
+
+```text
+[Kff Kfr] [uf] = [Ff]
+[Krf Krr] [ur]   [Fr]
+```
+
+With prescribed support displacement `ur`:
+
+```text
+Kff uf = Ff - Kfr ur
+```
+
+When `ur = 0`, this reduces to:
+
+```text
+Kff uf = Ff
+```
+
+## Static Analysis
 
 ### Solve
+
 ```text
 K u = F
-u = K^{-1} F  (or solve Kx=b via direct elimination)
+Kff uf = Ff
 ```
 
-### Recovery
-Support reactions:
+Use a direct linear solve for `Kff uf = Ff`; do not compute an explicit global inverse for ordinary solving.
+
+### Reactions
+
+After recovering the full displacement vector:
+
 ```text
-R = K u - F  (residual force)
+R = K u - F
 ```
-(Or equivalently: extract forces at restrained DOFs)
 
-Element local forces:
+Support reactions are extracted at restrained DOFs and mapped back to nodal `[Fx, Fy, Mz]`.
+
+### Member Force Recovery
+
+For each element:
+
 ```text
 u_local = T u_global
 f_local = k_local u_local + fef_local
 ```
-where `fef_local` accounts for distributed loads, thermal effects, settlements.
 
-### Outputs
-- Nodal displacements u
-- Support reactions R
-- Element forces: [N_i, V_i, M_i, N_j, V_j, M_j] per element
-- Diagrams: N/V/M along each element
+`fef_local` accounts for fixed-end effects from member loads, thermal loading, settlements, and equivalent nodal actions supported by the model.
 
----
+### Static Outputs
 
-## Mass Assembly (Phase 3)
+- DOF map
+- `K`, `Kff`
+- `F`, `Ff`
+- nodal displacements
+- support reactions
+- member-end forces
+- axial force `N`, shear force `V`, and bending moment `M` diagram data
 
-### Lumped Mass
-Place 1/2 of element mass at each node:
+## Mass Assembly
+
+Modal analysis requires a compatible mass matrix. Lumped mass is the final-scope default for educational workflows.
+
+For a member with density `rho`, area `A`, and length `L`:
+
 ```text
-For frame: m_node = (rho * A * L) / 2
-M[dof_i, dof_i] += m_node
-M[dof_j, dof_j] += m_node
-```
-Rotational inertia: typically ignored (set to 0) unless explicitly modeled.
-
-### Consistent Mass (Optional)
-Standard Euler-Bernoulli consistent mass matrix for frame elements (use if specified by problem).
-
----
-
-## Damping (Phase 3–4)
-
-### Rayleigh Damping
-```text
-C = alpha * M + beta * K
+m_total = rho A L
+m_node = m_total / 2
 ```
 
-Given two target damping ratios `zeta_i` and `zeta_j` at frequencies `omega_i` and `omega_j`:
+The translational nodal masses are added to the appropriate translational DOFs. Rotational inertia is ignored unless explicitly modeled by input data.
+
+Nodal lumped masses are assembled directly into the corresponding active translational DOFs.
+
+## Massless DOF Handling
+
+Before modal analysis:
+
+- disconnected zero-mass DOFs may be removed
+- stiffness-coupled massless DOFs must be statically condensed
+
+For active massive DOFs `a` and massless stiffness-coupled DOFs `m`:
+
 ```text
-alpha = 2 * zeta * omega_i * omega_j / (omega_i + omega_j)
-beta  = 2 * zeta / (omega_i + omega_j)
+K_eff = Kaa - Kam Kmm^-1 Kma
+M_eff = Maa
 ```
-where `zeta = (zeta_i + zeta_j) / 2` or problem-specified value.
 
-### Modal Damping (Simplified, Phase 5+)
-For each mode n:
-```text
-C_n = 2 * zeta_n * omega_n * M_n
-```
-Used in modal superposition for THA/RSA.
+The modal eigenproblem uses the retained effective system.
 
----
+## Modal Analysis
 
-## Modal Analysis (Phase 4)
+### Generalized Eigenproblem
 
-### Generalized Eigenvalue Problem
 ```text
 K phi = lambda M phi
 ```
-where `lambda = omega^2`.
 
-### Solution Strategy (Pure Python)
-1. Cholesky decomposition: `M = L L^T`
-2. Transform: `A = L^{-1} K L^{-T}`
-3. Jacobi eigen solver: `A y = lambda y`
-4. Back-transform: `phi = L^{-T} y`
+where:
 
-### Normalization (Mass Orthonormalization)
 ```text
-phi_n := phi_n / sqrt(phi_n^T M phi_n)
-```
-Result: `phi_n^T M phi_n = 1.0` for all modes.
-
-### Frequencies and Periods
-```text
-omega_n = sqrt(lambda_n)  [rad/s]
-f_n = omega_n / (2*pi)     [Hz]
-T_n = 1 / f_n              [seconds]
+lambda = omega^2
+omega = sqrt(lambda)
 ```
 
-### Participation Factors and Effective Mass
-For influence vector `r` (e.g., `r = [1, 0, 0, 1, 0, 0, ...]` for horizontal excitation):
+### Frequencies And Periods
+
 ```text
-Gamma_n = phi_n^T M r  (since phi^T M phi = 1)
+f = omega / (2 pi)
+T = 1 / f
+```
+
+### Mode Shape Normalization
+
+Mass normalization:
+
+```text
+phi_n = phi_n / sqrt(phi_n^T M phi_n)
+```
+
+After normalization:
+
+```text
+phi_n^T M phi_n = 1
+```
+
+The UI may also display magnitude-normalized or reference-DOF-normalized mode shapes for readability, but stored modal properties should remain mathematically traceable.
+
+### Participation And Effective Mass
+
+For influence vector `r`, commonly horizontal translation:
+
+```text
+Gamma_n = (phi_n^T M r) / (phi_n^T M phi_n)
+```
+
+For mass-normalized modes:
+
+```text
+Gamma_n = phi_n^T M r
+```
+
+Effective modal mass:
+
+```text
+M_eff,n = Gamma_n^2 (phi_n^T M phi_n)
+```
+
+For mass-normalized modes:
+
+```text
 M_eff,n = Gamma_n^2
-mass_ratio_n = M_eff,n / (r^T M r)  [fraction of total participating mass]
 ```
 
-### Outputs
-- Eigenvalues (lambda, omega^2)
-- Frequencies (Hz)
-- Periods (seconds)
-- Mode shapes (mass-normalized)
-- Modal masses (≈ 1.0)
-- Participation factors
-- Effective masses
-- Mass participation ratios (%)
+Total participating mass:
 
----
-
-## Damped Modal Superposition (Phase 5–6)
-
-For each mode n with modal properties:
 ```text
-omega_n, zeta_n, Gamma_n, phi_n
+M_total = r^T M r
 ```
 
-In modal coordinates `q_n(t)`:
+Mass participation ratio:
+
 ```text
-q_n_ddot + 2*zeta_n*omega_n * q_n_dot + omega_n^2 * q_n = Gamma_n * ag(t)
-```
-where `ag(t)` is the ground acceleration.
-
-Solve using Newmark step-by-step (Phase 5) or spectral acceleration (Phase 6).
-
-Transform back to physical coordinates:
-```text
-u(t) = sum_n phi_n * q_n(t)
+ratio_n = M_eff,n / M_total
 ```
 
----
+Cumulative participation is the running sum of `ratio_n`.
 
-## Response Spectrum Analysis (Phase 6)
+### Modal Outputs
 
-### Spectrum Lookup
-For each mode n:
-- Period: `T_n`
-- Damping ratio: `zeta_n`
-- Lookup `Sa(T_n, zeta_n)` from design spectrum
-
-### Modal Response
-```text
-q_n,max = Gamma_n * Sa(T_n, zeta_n) / omega_n^2
-u_n,max = phi_n * q_n,max  [peak displacement due to mode n]
-F_n,max = K * u_n,max       [peak forces due to mode n]
-```
-
-### Combination: SRSS
-```text
-R_total = sqrt(sum_n (R_n,max)^2)
-```
-for any response quantity R (displacement, force, etc.).
-
-### Combination: CQC (Complete Quadratic Combination)
-```text
-R_total = sqrt(sum_i sum_j rho_ij * R_i,max * R_j,max)
-```
-
-#### CQC Coupling Coefficient (Chopra formula)
-```text
-rho_ij = (8 * zeta^2 * sqrt(1-zeta^2) * (r_ij + 4*zeta^2*r_ij^3)) / 
-         ((1 - r_ij^2)^2 + 4*zeta^2*r_ij^2*(1 + r_ij^2))
-
-where r_ij = omega_i / omega_j  (typically omega_i <= omega_j)
-and zeta is average damping ratio (e.g., (zeta_i + zeta_j)/2 or global zeta)
-```
-
-**Note:** Implementation detail — if `omega_i == omega_j`, set `rho_ij = 1.0`.
-
-### Outputs
-- Interpolated spectrum values Sa(T_n, zeta_n)
-- Modal response vectors (before combination)
-- Modal base shears / OTMs (if applicable)
-- Combined response via SRSS or CQC
-- Peak displacement, base shear, OTM
-
----
-
-## Time-History Analysis (Phase 5)
-
-### Newmark Average Acceleration Method
-
-Default constants:
-```text
-gamma = 1/2  (average acceleration assumed)
-beta = 1/4
-```
-
-#### Effective Stiffness and Load at Each Step
-```text
-Keff = K + a0*M + a1*C
-where a0 = 1/(beta*dt^2)
-      a1 = gamma/(beta*dt)
-
-Peff(t+dt) = P(t+dt) + M*(a0*u(t) + a2*u_dot(t) + a3*u_ddot(t))
-                      + C*(a1*u(t) + a4*u_dot(t) + a5*u_ddot(t))
-
-where a2, a3, a4, a5 are standard Newmark constants
-```
-
-#### Solve
-```text
-Keff u(t+dt) = Peff(t+dt)
-```
-
-#### Update (after solving for u(t+dt))
-```text
-u_ddot(t+dt) = a0*(u(t+dt) - u(t)) - a2*u_dot(t) - a3*u_ddot(t)
-u_dot(t+dt)  = u_dot(t) + (1-gamma)*dt*u_ddot(t) + gamma*dt*u_ddot(t+dt)
-```
-
-### Earthquake Excitation
-For horizontal ground motion `ag(t)`:
-```text
-r = [1, 0, 0, 1, 0, 0, ...]  (1 at every active ux DOF)
-P(t) = -M * r * ag(t)
-```
-
-### Ground Motion Units (Phase 5)
-
-All ground accelerations must be converted to internal acceleration units before solving.
-
-If the structural unit system is kN-m-tonne, then:
-1 tonne * 1 m/s² = 1 kN
-Therefore ag should be stored internally as m/s².
-
-Acceleration conversion:
-- m/s²: ag_si = value
-- cm/s²: ag_si = value / 100
-- mm/s²: ag_si = value / 1000
-- g: ag_si = value * 9.80665
-
-After conversion:
-ag(t) = scale_factor * ag_si(t)
-
-Earthquake force:
-P(t) = -M r ag(t)
-
-### Outputs
-- Time vector
-- Excitation history ag(t)
-- Displacement, velocity, acceleration histories u(t), u_dot(t), u_ddot(t)
-- Base shear V_base(t) = sum of shear reactions
-- Overturning moment OTM(t) = sum of moment reactions
-- Peak response quantities (max absolute values)
-- Optional: step table sampling key time steps
-
----
+- full and reduced/condensed stiffness and mass matrices where available
+- eigenvalues `lambda`
+- circular frequencies `omega`
+- frequencies `f`
+- periods `T`
+- mode shapes
+- modal masses
+- participation factors
+- effective modal masses
+- mass participation ratios
+- active dynamic DOF information
 
 ## Numerical Rules
-- **Prefer solving Kx=b** over explicit K^{-1}. Use Gaussian elimination or similar.
-- **No explicit matrix inverse** unless dimension is <10 (e.g., element-level condensation).
-- **Core math: pure Python** unless otherwise approved.
-- **Required utilities:**
-  - Matrix multiply, transpose, add, subtract
-  - Vector norms (L2, max)
-  - Linear solver (triangular substitution, Gaussian elimination)
-  - Cholesky decomposition (for modal)
-  - Jacobi eigenvalue solver (for generalized eigen)
-  - 1D interpolation (for spectrum lookup)
-  - `abs()`, `sqrt()`, `sin()`, `cos()` (standard library)
 
----
+- Prefer solving linear systems over computing explicit matrix inverses.
+- Keep core numerical routines transparent and standard-library oriented unless a dependency is approved.
+- Preserve intermediate matrices/vectors for reports, tests, and classroom inspection.
+- Detect singular or ill-conditioned systems and report clear analysis failures.
 
 ## Sign Conventions
 
-**Global coordinates:** x horizontal (right +), y vertical (up +), rz rotation (CCW +).
+- Global `x`: positive right.
+- Global `y`: positive up.
+- Global `rz`: positive counterclockwise.
+- Element local axis: positive from node `i` to node `j`.
+- Axial force `N`: positive in tension.
+- Shear force `V`: positive according to the project/SAP2000-compatible member-end convention.
+- Bending moment `M`: positive according to the project/SAP2000-compatible plotting and member-end convention.
+- Downward applied load is negative global `y`.
 
-**Element local:** runs from node_i to node_j.
+## Deferred/Future Extensions
 
-**Frame DOFs:** `[ux_i, uy_i, rz_i, ux_j, uy_j, rz_j]`.
+RSA and THA should remain future extensions unless explicitly approved for a later scope. Future work should reuse the same architecture:
 
-**Axial force N:** positive tension.
+```text
+model -> assembly -> generalized solver -> result object -> visualization/export
+```
 
-**Shear force V:** positive up-on-left (SAP2000 convention).
-
-**Bending moment M:** positive sagging (concave up, tension in bottom fiber).
-
-**Applied load w:** negative = downward.
-
-**FEF (Fixed-End Force):** components positive in local element directions.
+Future RSA would build on modal properties and spectrum interpolation/combination. Future THA would build on dynamic matrices, damping, ground-motion input, and time-integration results. Neither workflow is part of the final submitted desktop UI scope.

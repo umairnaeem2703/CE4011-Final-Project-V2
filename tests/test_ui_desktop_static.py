@@ -1098,7 +1098,7 @@ def test_settlement_member_end_forces_match_sap2000_sign_convention():
     result = run_static_analysis(model)
     assert result.ok
 
-    expected = _sap_element_joint_forces(repo_root / "sap2000" / "test-settlement-results.txt")
+    expected = _sap_element_joint_forces(repo_root / "sap2000_solutions" / "test-settlement-results.txt")
     for element_id in ("F1", "F2", "F4", "T1"):
         computed = result.results.member_end_forces[element_id]
         for end_label, joint_index in (("i", 0), ("j", 1)):
