@@ -1,6 +1,6 @@
-PWD C:\Users\MOHAMMAD UMAIR\Documents\GitHub\CE4011-Final-Project-V2\docs\final_latex\user_manual
+PWD c:\Users\MOHAMMAD UMAIR\Documents\GitHub\CE4011-Final-Project-V2\docs\final_latex\user_manual
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\MiKTeX\miktex\data\le\pdftex\pdflatex.fmt
-INPUT user_manual.tex
+INPUT c:\Users\MOHAMMAD UMAIR\Documents\GitHub\CE4011-Final-Project-V2\docs\final_latex\user_manual\user_manual.tex
 OUTPUT user_manual.log
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\base\article.cls
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\base\article.cls

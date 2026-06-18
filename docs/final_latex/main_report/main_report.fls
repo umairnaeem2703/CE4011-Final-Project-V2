@@ -1,6 +1,6 @@
-PWD C:\Users\MOHAMMAD UMAIR\Documents\GitHub\CE4011-Final-Project-V2\docs\final_latex\main_report
+PWD c:\Users\MOHAMMAD UMAIR\Documents\GitHub\CE4011-Final-Project-V2\docs\final_latex\main_report
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\MiKTeX\miktex\data\le\pdftex\pdflatex.fmt
-INPUT main_report.tex
+INPUT c:\Users\MOHAMMAD UMAIR\Documents\GitHub\CE4011-Final-Project-V2\docs\final_latex\main_report\main_report.tex
 OUTPUT main_report.log
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\base\article.cls
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\base\article.cls
@@ -212,12 +212,12 @@ INPUT .\sections\07_visualization.tex
 INPUT .\sections\07_visualization.tex
 INPUT .\sections\07_visualization.tex
 INPUT sections\07_visualization.tex
-INPUT .\figures\static_frame_deformed.png
-INPUT .\figures\static_frame_deformed.png
-INPUT .\figures\static_frame_deformed.png
-INPUT .\figures\static_frame_deformed.png
-INPUT .\figures\static_frame_deformed.png
-INPUT .\figures\static_frame_deformed.png
+INPUT .\figures\static_frame_individual_member.png
+INPUT .\figures\static_frame_individual_member.png
+INPUT .\figures\static_frame_individual_member.png
+INPUT .\figures\static_frame_individual_member.png
+INPUT .\figures\static_frame_individual_member.png
+INPUT .\figures\static_frame_individual_member.png
 INPUT .\sections\08_validation_summary.tex
 INPUT .\sections\08_validation_summary.tex
 INPUT .\sections\08_validation_summary.tex

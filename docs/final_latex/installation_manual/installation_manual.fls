@@ -34,6 +34,15 @@ INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\graphics-d
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\graphics\mathcolor.ltx
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\graphics\mathcolor.ltx
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\graphics\mathcolor.ltx
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\graphics\graphicx.sty
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\graphics\graphicx.sty
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\graphics\graphics.sty
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\graphics\graphics.sty
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\graphics\trig.sty
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\graphics\trig.sty
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\graphics-cfg\graphics.cfg
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\graphics-cfg\graphics.cfg
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\graphics-cfg\graphics.cfg
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\hyperref\hyperref.sty
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\hyperref\hyperref.sty
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\kvsetkeys\kvsetkeys.sty
@@ -92,6 +101,11 @@ OUTPUT installation_manual.aux
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\context\base\mkii\supp-pdf.mkii
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\context\base\mkii\supp-pdf.mkii
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\context\base\mkii\supp-pdf.mkii
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\epstopdf-pkg\epstopdf-base.sty
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\epstopdf-pkg\epstopdf-base.sty
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\00miktex\epstopdf-sys.cfg
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\00miktex\epstopdf-sys.cfg
+INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\tex\latex\00miktex\epstopdf-sys.cfg
 INPUT .\installation_manual.out
 INPUT .\installation_manual.out
 INPUT installation_manual.out
@@ -116,22 +130,30 @@ INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\tfm\public\cm\
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\tfm\public\cm\cmmi10.tfm
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\tfm\public\cm\cmsy10.tfm
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\tfm\public\cm\cmtt10.tfm
-INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\tfm\public\cm\cmbx10.tfm
-INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\tfm\public\cm\cmti10.tfm
+INPUT .\figures\terminal_setup_screenshot.png
+INPUT .\figures\terminal_setup_screenshot.png
+INPUT .\figures\terminal_setup_screenshot.png
+INPUT .\figures\terminal_setup_screenshot.png
+INPUT .\figures\terminal_setup_screenshot.png
+INPUT .\figures\terminal_setup_screenshot.png
+INPUT .\figures\terminal_setup_screenshot.png
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\MiKTeX\fonts\map\pdftex\pdftex.map
+INPUT .\figures\launched_app_screenshot.png
+INPUT .\figures\launched_app_screenshot.png
+INPUT .\figures\launched_app_screenshot.png
+INPUT .\figures\launched_app_screenshot.png
+INPUT .\figures\launched_app_screenshot.png
+INPUT .\figures\launched_app_screenshot.png
+INPUT .\figures\launched_app_screenshot.png
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\tfm\public\cm\cmbx12.tfm
 INPUT installation_manual.aux
 INPUT .\installation_manual.out
 INPUT .\installation_manual.out
-INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\type1\public\amsfonts\cm\cmbx10.pfb
-INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\type1\public\amsfonts\cm\cmbx10.pfb
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\type1\public\amsfonts\cm\cmbx12.pfb
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\type1\public\amsfonts\cm\cmbx12.pfb
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\type1\public\amsfonts\cm\cmr10.pfb
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\type1\public\amsfonts\cm\cmr10.pfb
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\type1\public\amsfonts\cm\cmr12.pfb
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\type1\public\amsfonts\cm\cmr12.pfb
-INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\type1\public\amsfonts\cm\cmti10.pfb
-INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\type1\public\amsfonts\cm\cmti10.pfb
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\type1\public\amsfonts\cm\cmtt10.pfb
 INPUT C:\Users\MOHAMMAD UMAIR\AppData\Local\Programs\MiKTeX\fonts\type1\public\amsfonts\cm\cmtt10.pfb

@@ -72,6 +72,8 @@ COMMAND_TABS = (
     (
         "Assign",
         (
+            ("command", "Draw Node"),
+            ("command", "Draw Member"),
             ("command", "Materials / Sections"),
             ("command", "Assign Support"),
             ("command", "Assign Load"),

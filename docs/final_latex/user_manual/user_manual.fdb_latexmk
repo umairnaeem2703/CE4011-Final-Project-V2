@@ -1,9 +1,9 @@
 # Fdb version 4
-["pdflatex"] 1781801079.54096 "user_manual.tex" "user_manual.pdf" "user_manual" 1781801083.30031 0
+["pdflatex"] 1781803887.32846 "c:/Users/MOHAMMAD UMAIR/Documents/GitHub/CE4011-Final-Project-V2/docs/final_latex/user_manual/user_manual.tex" "user_manual.pdf" "user_manual" 1781803890.8773 0
   "../diagrams/rendered/desktop_workflow.png" 1781798645 58186 b5660311989c0e4d3d975eacb5dbd9ea ""
   "../diagrams/rendered/modal_analysis_workflow.png" 1781798645 63674 e1a193965f3a6780ea89077e3e427f1a ""
   "../diagrams/rendered/static_analysis_workflow.png" 1781798645 54662 9eee4eb4dec46d3f59955158c3958f15 ""
-  "../main_report/figures/main_ui.png" 1781793054 35787 4a4e19ccaa14ccd6852bc75f3590f4c9 ""
+  "../main_report/figures/main_ui.png" 1781802780 50044 9799c779665e271064deeffc701cd031 ""
   "../main_report/figures/mass_assignments.png" 1781794281 79057 61402e05e3f7f61ecd3190e982513271 ""
   "../main_report/figures/member_load_assignment.png" 1781794261 83395 9a337df69519327cb4ade8afcd366444 ""
   "../main_report/figures/modal_analysis_results_summary.png" 1781795567 30834 71890b5ba32dd71883b0c0865584d72a ""
@@ -101,9 +101,10 @@
   "C:/Users/MOHAMMAD UMAIR/AppData/Local/Programs/MiKTeX/tex/latex/tools/longtable.sty" 1761901070 16014 dfa4b4d4e04a78a3f05a90c19711737a ""
   "C:/Users/MOHAMMAD UMAIR/AppData/Local/Programs/MiKTeX/tex/latex/url/url.sty" 1388490452 12796 8edb7d69a20b857904dd0ea757c14ec9 ""
   "C:/Users/MOHAMMAD UMAIR/AppData/Local/Programs/MiKTeX/tex/latex/xcolor/xcolor.sty" 1729265222 55384 b454dec21c2d9f45ec0b793f0995b992 ""
-  "user_manual.aux" 1781801082 7356 3658ab782141a454bbb5f255bcc32ee2 "pdflatex"
-  "user_manual.out" 1781801082 4175 a153e9b34fb1fb8f03e8d7a309cb5c72 "pdflatex"
-  "user_manual.tex" 1781801068 18757 771fb244530e62f7b2ac4aca1cb4893b ""
+  "c:/Users/MOHAMMAD UMAIR/Documents/GitHub/CE4011-Final-Project-V2/docs/final_latex/user_manual/user_manual.tex" 1781803882 18759 05e7e20a82636629f058778649778fba ""
+  "user_manual.aux" 1781803890 7358 da80c6444dc242364b55421539dd4d59 "pdflatex"
+  "user_manual.out" 1781803890 4175 a153e9b34fb1fb8f03e8d7a309cb5c72 "pdflatex"
+  "user_manual.tex" 1781803882 18759 05e7e20a82636629f058778649778fba ""
   (generated)
   "user_manual.aux"
   "user_manual.log"
